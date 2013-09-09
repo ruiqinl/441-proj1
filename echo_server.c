@@ -23,7 +23,7 @@
 #define ECHO_PORT 9999
 #define BUF_SIZE 4096
 #define IP_BUF_SIZE 128
-#define MAX_SOCK 1024 
+#define MAX_SOCK 1024
 
 #define DEBUG 0
 #define dbprintf(...) do{if(DEBUG) fprintf(stderr, __VA_ARGS__); }while(0)
@@ -39,7 +39,6 @@ int close_socket(int sock)
 }
 
 struct buf {
-    int sock;
     char buf[BUF_SIZE];
     char *p;
     ssize_t size;
@@ -52,7 +51,7 @@ void init_buf(struct buf* bufp){
 
 int is_2big(int fd) {
     if (fd >= MAX_SOCK) {
-	fprintf(stderr, "Warning! fd %d >= MAX_SOCK %d, it's ignored\n", fd, MAX_SOCK);
+	fprintf(stderr, "Warning! fd %d >= MAX_SOCK %d, it's ignored, the client might block\n", fd, MAX_SOCK);
 	return 1;
     }
     return 0;
@@ -135,7 +134,8 @@ int main(int argc, char* argv[])
 			return EXIT_FAILURE;
 		    }
 
-		    dbprintf("Server: received new connection from %s\n", inet_ntop(AF_INET, &(cli_addr.sin_addr), clientIP, INET6_ADDRSTRLEN)); // debug print
+		    dbprintf("Server: received new connection from %s, ", inet_ntop(AF_INET, &(cli_addr.sin_addr), clientIP, INET6_ADDRSTRLEN)); // debug print
+		    dbprintf("socket %d is created\n", client_sock);
 
 		    /* alloc buffer only if the client_sock is smaller than MAX_SOCK  */
 		    if (!is_2big(client_sock)){
@@ -152,7 +152,7 @@ int main(int argc, char* argv[])
 		} else {
 
 		    /* receive error */
-		    if ((readret = recv(i, buf, BUF_SIZE, 0)) <= 0) {
+		    if ((readret = recv(i, buf_pts[i]->buf, BUF_SIZE, 0)) <= 0) {
 			
 			if (readret == -1) {
 			    perror("Error! recv");
@@ -163,7 +163,8 @@ int main(int argc, char* argv[])
 			
 			/* clear up  */
 			close_socket(i);
-			FD_CLR(i, &master_fds);
+			FD_CLR(i, &master_read_fds);
+			free(buf_pts[i]);
 
 		    } else {
 
@@ -172,6 +173,7 @@ int main(int argc, char* argv[])
 			 * and send the data back when the next select returns
 			 */
 			FD_SET(i, &master_write_fds);
+			buf_pts[i]->size += readret; // increase size, p does not change
 			
 		    }
 		    
@@ -181,12 +183,16 @@ int main(int argc, char* argv[])
 	    /* check fd in write_fds  */
 	    if (FD_ISSET(i, &write_fds)) {
 		
-		if ((sendret = send(i, buf, readret, 0)) != readret) {
+		if ((sendret = send(i, buf_pts[i]->buf, buf_pts[i]->size, 0)) != buf_pts[i]->size) {
 		    close_socket(i);
 		    perror("Error! send");
 		    fprintf(stderr, "sendret=%ld, readret=%ld\n", sendret, readret);
 		    return EXIT_FAILURE;
 		}
+		
+		// send all data, clear up buffer: size -> 0, p -> buf
+		init_buf(buf_pts[i]);
+		FD_CLR(i, &master_write_fds);
 
 		dbprintf("Server: received %ld bytes data, sent %ld bytes back to client_sock %d\n", readret, sendret, i); // debug print
 
