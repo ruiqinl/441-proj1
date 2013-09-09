@@ -39,15 +39,37 @@ int close_socket(int sock)
 }
 
 struct buf {
-    char buf[BUF_SIZE];
+    char *buf;
     char *p;
     ssize_t size;
+
+    int allocated;
 };
 
 void init_buf(struct buf* bufp){
+
+    bufp->buf = (char *) calloc(BUF_SIZE, sizeof(char));
+    bufp->p = bufp->buf;
+    bufp->size = 0;
+
+    bufp->allocated = 1;
+}
+
+void reset_buf(struct buf* bufp) {
+    
     bufp->p = bufp->buf;
     bufp->size = 0;
 }
+
+void clear_buf(struct buf* bufp){
+    if (bufp->buf != NULL)
+	free(bufp->buf);
+    bufp->p = NULL;
+    bufp->size = 0;
+    
+    bufp->allocated = 0;
+}
+
 
 int is_2big(int fd) {
     if (fd >= MAX_SOCK) {
@@ -142,7 +164,8 @@ int main(int argc, char* argv[])
 
 			FD_SET(client_sock, &master_read_fds);
 			buf_pts[client_sock] = (struct buf*) calloc(1, sizeof(struct buf));
-			init_buf(buf_pts[client_sock]);
+			init_buf(buf_pts[client_sock]); // initialize struct buf
+			dbprintf("allocated:%d\n", buf_pts[client_sock]->allocated);
 
 			// track maxfd
 			if (client_sock > maxfd)
@@ -156,6 +179,11 @@ int main(int argc, char* argv[])
 			
 			if (readret == -1) {
 			    perror("Error! recv");
+
+			    dbprintf("before clear_buf recv, alloc:%d\n", buf_pts[i]->allocated);
+			    reset_buf(buf_pts[i]);
+			    dbprintf("after clear_buf recv, alloc:%d\n", buf_pts[i]->allocated);
+
 			    return EXIT_FAILURE;
 			} else if ( readret == 0) { 
 			    dbprintf("Server: client_sock %d closed\n",i);
@@ -164,7 +192,7 @@ int main(int argc, char* argv[])
 			/* clear up  */
 			close_socket(i);
 			FD_CLR(i, &master_read_fds);
-			free(buf_pts[i]);
+			
 
 		    } else {
 
@@ -186,15 +214,15 @@ int main(int argc, char* argv[])
 		if ((sendret = send(i, buf_pts[i]->buf, buf_pts[i]->size, 0)) != buf_pts[i]->size) {
 		    close_socket(i);
 		    perror("Error! send");
-		    fprintf(stderr, "sendret=%ld, readret=%ld\n", sendret, readret);
+		    fprintf(stderr, "sendret=%ld, readret=%ld\n", sendret, buf_pts[i]->size);
 		    return EXIT_FAILURE;
 		}
-		
-		// send all data, clear up buffer: size -> 0, p -> buf
-		init_buf(buf_pts[i]);
-		FD_CLR(i, &master_write_fds);
 
-		dbprintf("Server: received %ld bytes data, sent %ld bytes back to client_sock %d\n", readret, sendret, i); // debug print
+		dbprintf("Server: received %ld bytes data, sent %ld bytes back to client_sock %d\n", buf_pts[i]->size, sendret, i); // debug print
+		dbprintf("buf reset\n");
+
+		FD_CLR(i, &master_write_fds);
+		reset_buf(buf_pts[i]); // reset struct buf
 
 	    } // end FD_ISSET write_fds
 
@@ -203,6 +231,15 @@ int main(int argc, char* argv[])
     }
 
     close_socket(sock);
+    
+    for (i = 0; i <= maxfd; i++ ) {
+	if (buf_pts[i]->allocated == 1) {
+	    dbprintf("before clear_buf send, alloc:%d\n", buf_pts[i]->allocated);
+	    clear_buf(buf_pts[i]);
+	    dbprintf("before clear_buf send, alloc:%d\n", buf_pts[i]->allocated);
+	}
+    }
+    
 
     return EXIT_SUCCESS;
 }
