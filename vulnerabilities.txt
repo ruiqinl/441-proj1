@@ -1,3 +1,5 @@
-1. The server uses an array of pointers to buffer structure to manage the buffers associated with all connected sockets. This implementation takes space to allocate all the pointers, and it has an upper limit on number of clients that can be connected to the server. Extra clients can be connected to the server, but are sockets are closed immediately without sending any message. So the client could get confused by losing connection for unknown reason.
+1. The server uses an array of pointers to buffer structure to manage the buffers associated with all connected sockets. This implementation sets an upper limit on number of clients that can be connected to the server. Extra clients can be connected to the server, but are sockets are closed immediately without sending any message. So the client could get confused by losing connection for unknown reason.
 
 2. This implementation assumes that messages can be recevied and sent by one call. So if client send long message, server might only receive a piece of it, and send some short piece back to client.
+
+3. As long as the server come across an error when reading or writing to any single client, the server exits. Better implementation might be to close that single socket to the client, and keep other sockets.

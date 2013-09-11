@@ -1,7 +1,7 @@
 #ifndef _HELPER_H_
 #define _HELPER_H_
 
-#define MAX_SOCK 2048
+#define MAX_SOCK 1024
 #define BUF_SIZE 4096
 
 struct buf {
