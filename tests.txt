@@ -1,0 +1,27 @@
+
+Test cases:
+
+$ ./lisod 9999 &
+----- Echo Server -----
+
+$ ./echo_client 127.0.0.1 9999 
+hello world!
+Sending hello world!
+Received hello world!
+
+$ ./cp1_checker.py 127.0.0.1 9999 1000 10 2048 500
+success!
+
+$ ./cp1_checker.py 127.0.0.1 9999 1000 10 2048 1000
+success!
+
+$ ./cp1_checker.py 127.0.0.1 9999 1000 10 3000 500
+success!
+
+$ ./cp1_checker.py 127.0.0.1 9999 1000 50 2048 500
+success!
+
+
+Known issues:
+
+Have not found any new issues which have not been resolved yet.

@@ -33,6 +33,8 @@ purpose is:
 		    .../vulnerabilities.txt     - File containing documentation of at 
 						  one vulnerability I identify at each
 						  stage
+		    .../tests.txt		- File containing documentation of your
+						 test cases and any known issues you have
                     .../src/echo_client.c       - Simple echo network client
                     .../src/echo_server.c       - Simple echo network server
                     .../src/Makefile            - Contains rules for make

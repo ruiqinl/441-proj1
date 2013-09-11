@@ -115,34 +115,31 @@ int main(int argc, char* argv[])
 		    /* listinging sockte is ready, server receives new connection */
 
 		    if ((client_sock = accept(sock, (struct sockaddr *)&cli_addr, &cli_size)) == -1){
-			close_socket(sock);
-			clear_buf_array(buf_pts, maxfd);
-			perror("Error! accept");
-			return EXIT_FAILURE;
-		    }
-
-		    dbprintf("Server: received new connection from %s, ", inet_ntop(AF_INET, &(cli_addr.sin_addr), clientIP, INET6_ADDRSTRLEN)); 
-		    dbprintf("socket %d is created\n", client_sock); // debug print
-
-		    /* alloc buffer only if the client_sock is smaller than MAX_SOCK  */
-		    if (!is_2big(client_sock)) {
-
-			FD_SET(client_sock, &master_read_fds);
-			buf_pts[client_sock] = (struct buf*) calloc(1, sizeof(struct buf));
-			init_buf(buf_pts[client_sock]); // initialize struct buf
-			dbprintf("buf_pts[%d] allocated\n", client_sock);
-
-			/* track maxfd */
-			if (client_sock > maxfd)
-			    maxfd = client_sock;
-
+			perror("Error! accept error! ignore it");
 		    } else {
-			/* client_sock is larger than MAX_SOCK, close it 
-			 * client receives error
-			 */			
-			fprintf(stderr, "client_sock %d is larger than MAX_SOCK, closed, this might cause error\n", client_sock);
-			close_socket(client_sock);
-		    }	    
+
+			dbprintf("Server: received new connection from %s, ", inet_ntop(AF_INET, &(cli_addr.sin_addr), clientIP, INET6_ADDRSTRLEN)); 
+			dbprintf("socket %d is created\n", client_sock); // debug print
+
+			/* alloc buffer only if the client_sock is smaller than MAX_SOCK  */
+			if (!is_2big(client_sock)) {
+
+			    FD_SET(client_sock, &master_read_fds);
+			    buf_pts[client_sock] = (struct buf*) calloc(1, sizeof(struct buf));
+			    init_buf(buf_pts[client_sock]); // initialize struct buf
+			    dbprintf("buf_pts[%d] allocated\n", client_sock);
+
+			    /* track maxfd */
+			    if (client_sock > maxfd)
+				maxfd = client_sock;
+
+			} else {
+			    /* client_sock is larger than MAX_SOCK, close it 
+			     * client receives error
+			     */			
+			    close_socket(client_sock);
+			}	    
+		    }
 		    
 		} else {
 		    /* conneciton socket is ready, read */
@@ -151,19 +148,18 @@ int main(int argc, char* argv[])
 		    if ((readret = recv(i, buf_pts[i]->buf, BUF_SIZE, 0)) <= 0) {
 			
 			if (readret == -1) {
-			    perror("Error! recv");
+			    perror("Error! recv error! close this socket and clear its buffer");
 
 			    /* clear up  */
-			    close_socket(sock);
 			    close_socket(i);
-			    clear_buf_array(buf_pts, maxfd);
-			    return EXIT_FAILURE;
+			    clear_buf(buf_pts[i]);
 
 			} else if ( readret == 0) { 
-			    // finish reading, cannot close socket i
+			    // finish reading
 			    dbprintf("Server: client_sock %d closed\n",i);
 			    FD_CLR(i, &master_read_fds);
 			    clear_buf(buf_pts[i]);
+			    close_socket(i);
 			} 
 
 		    } else {
@@ -186,14 +182,9 @@ int main(int argc, char* argv[])
 	    if (FD_ISSET(i, &write_fds)) {
 		
 		if ((sendret = send(i, buf_pts[i]->buf, buf_pts[i]->size, 0)) != buf_pts[i]->size) {
-		    perror("Error! send");
+		    perror("Error! send error! ignore it");
 		    fprintf(stderr, "sendret=%ld, readret=%ld\n", sendret, buf_pts[i]->size);
-		    /* clear up  */
-		    close_socket(sock);
-		    close_socket(i);
-		    clear_buf_array(buf_pts, maxfd);
 
-		    return EXIT_FAILURE;
 		}
 		
 		dbprintf("Server: received %ld bytes data, sent %ld bytes back to client_sock %d\n", buf_pts[i]->size, sendret, i); // debug print
