@@ -135,7 +135,7 @@ int main(int argc, char* argv[])
 
 			} else {
 			    /* client_sock is larger than MAX_SOCK, close it 
-			     * client receives error
+			     * client might receive error
 			     */			
 			    close_socket(client_sock);
 			}	    
@@ -149,18 +149,14 @@ int main(int argc, char* argv[])
 			
 			if (readret == -1) {
 			    perror("Error! recv error! close this socket and clear its buffer");
-
-			    /* clear up  */
-			    close_socket(i);
-			    clear_buf(buf_pts[i]);
-
 			} else if ( readret == 0) { 
 			    // finish reading
 			    dbprintf("Server: client_sock %d closed\n",i);
-			    FD_CLR(i, &master_read_fds);
-			    clear_buf(buf_pts[i]);
-			    close_socket(i);
 			} 
+			/* clear up  */
+			FD_CLR(i, &master_read_fds);
+			clear_buf(buf_pts[i]);
+			close_socket(i);
 
 		    } else {
 
