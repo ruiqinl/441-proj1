@@ -10,8 +10,8 @@
 
 default: lisod echo_client
 
-lisod: lisod.c helper.c
-	gcc lisod.c helper.c -o lisod -Wall -Werror
+lisod: lisod.c helper.c http_parser.c
+	gcc lisod.c helper.c http_parser.c -o lisod -Wall -Werror
 
 echo_client: echo_client.c helper.c
 	gcc echo_client.c helper.c -o echo_client -Wall -Werror

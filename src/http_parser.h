@@ -3,6 +3,8 @@
 
 #include "helper.h"
 
-int parse_req(struct buf *bufp, struct http_req_t *http_req_p);
+int recv_request(int sock, struct buf *bufp);
+int parse_request(struct buf *bufp);
+int create_response(struct buf *bufp);
 
 #endif

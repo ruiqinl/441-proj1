@@ -17,10 +17,11 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include "helper.h"
+#include "http_parser.h"
 
 
-#define DEBUG 0
-#define dbprintf(...) do{if(DEBUG) fprintf(stderr, __VA_ARGS__); }while(0)
+#define DEBUG 1
+
 
 int close_socket(int sock)
 {
@@ -42,7 +43,9 @@ int main(int argc, char* argv[])
     }
 
     int sock, client_sock;
-    ssize_t readret, sendret;
+    int bufsize;
+    int errcode;
+    ssize_t sendret;
     socklen_t cli_size;
     struct sockaddr_in addr, cli_addr;
     //    char buf[BUF_SIZE];
@@ -52,8 +55,10 @@ int main(int argc, char* argv[])
     fd_set master_read_fds, master_write_fds;
     int maxfd, i;
     const int ECHO_PORT = atoi(argv[1]);
-    dbprintf("ECHO_PORT %d\n", ECHO_PORT);
-    printf("MAX_SOCK %d\n", MAX_SOCK);
+    struct http_req_t *http_req_p;
+
+    http_req_p = (struct http_req_t *) calloc(1, sizeof(struct http_req_t));
+    
 
     fprintf(stdout, "----- Echo Server -----\n");
     
@@ -90,7 +95,7 @@ int main(int argc, char* argv[])
     FD_SET(sock, &master_read_fds);
     
     maxfd = sock;
-    
+
     /* run until coming across errors */
     while (1) {
 
@@ -144,31 +149,37 @@ int main(int argc, char* argv[])
 		} else {
 		    /* conneciton socket is ready, read */
 
-		    /* receive error, or finish reading */
-		    if ((readret = recv(i, buf_pts[i]->buf, BUF_SIZE, 0)) <= 0) {
-			
-			if (readret == -1) {
+		    /* errcode, -1:recv error, 0: recv 0, 1: continue reading, 2: finished reading, 3: error, cannot find Content-Length header(POST), 4: other err  */
+		    errcode = recv_request(i, buf_pts[i]);
+		    
+		    if (errcode <= 0) {
+			if (errcode == -1) {
 			    perror("Error! recv error! close this socket and clear its buffer");
-			} else if ( readret == 0) { 
-			    // finish reading
+			} else if ( errcode == 0) { 
+			    // client socket closed
 			    dbprintf("Server: client_sock %d closed\n",i);
-			} 
+			}
+
 			/* clear up  */
 			FD_CLR(i, &master_read_fds);
 			clear_buf(buf_pts[i]);
 			close_socket(i);
 
-		    } else {
+		    } else if (errcode == 1) {
+			dbprintf("Server: request not fully received\n\n");
+			; // do nothing, continue reading 
 
-			/* receive data */
-			buf_pts[i]->size += readret;
-
-			/* Assume that all data can be received with one read,
-			 * get ready to write immediately after receiving data
-			 * And preapare for next read -- don't close socket i and
-			 * don't FD_CLR socket i
-			 */
-			FD_SET(i, &master_write_fds);    
+		    } else if (errcode == 2) {
+			dbprintf("Server: request just/already received\n");
+			dbprintf("Server: create/continue creating response\n");
+			FD_CLR(i, &master_read_fds);
+			//create_response(buf_pts[i]); // check return code, maybe set master_write_set
+		    } else if (errcode == 3) {
+			dbprintf("Server: error, cannot find Content-Length header\n");
+			// send response back and clear up
+		    } else if (errcode == 4) {
+			dbprintf("Server: other errors\n");
+			// send response back and clear up
 		    }
 		    
 		} // end i == socket
@@ -176,14 +187,17 @@ int main(int argc, char* argv[])
 	    
 	    /* check fd in write_fds  */
 	    if (FD_ISSET(i, &write_fds)) {
-		
-		if ((sendret = send(i, buf_pts[i]->buf, buf_pts[i]->size, 0)) != buf_pts[i]->size) {
+
+		bufsize = buf_pts[i]->buf_tail - buf_pts[i]->buf_head;
+
+		if ((sendret = send(i, buf_pts[i]->buf_head, bufsize, 0)) != bufsize) {
 		    perror("Error! send error! ignore it");
-		    fprintf(stderr, "sendret=%ld, readret=%ld\n", sendret, buf_pts[i]->size);
+		    fprintf(stderr, "sendret=%ld, readret=%d\n", sendret, bufsize);
 
 		}
-		
-		dbprintf("Server: received %ld bytes data, sent %ld bytes back to client_sock %d\n", buf_pts[i]->size, sendret, i); // debug print
+		buf_pts[i]->buf_head += sendret;
+
+		dbprintf("Server: received %d bytes data, sent %ld bytes back to client_sock %d\n", bufsize, sendret, i); // debug print
 		
 		/* clear up  */
 		FD_CLR(i, &master_write_fds);
