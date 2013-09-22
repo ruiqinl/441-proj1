@@ -11,6 +11,8 @@
 #define DEBUG 1
 #define PATH_MAX 1024
 
+
+
 /* Return errcode, -1:recv error, 0: recv 0, 1: continue reading, 2: finished reading, 3: error, cannot find Content-Length header(POST), 4: other err  */
 int recv_request(int sock, struct buf *bufp) {
     char *p;
@@ -167,54 +169,95 @@ int parse_request(struct buf *bufp) {
 }
 
 
+/* return the size of buffer inside struct buf, 0 or a positive number  */ 
 int create_response(struct buf *bufp) {
     
     int fd;
-    int readbytes;
     struct stat status;
     char path[PATH_MAX];
-    int bufsize;
+
     struct http_req_t *http_req_p = bufp->http_req_p;
 
+    if (bufp->response_created == 1) {
+	// full response has been created, just send rest back to client
+	dbprintf("create_response: no more content to create\n");
+	return bufp->size;
+    }
+
+    // push more response into buffer
     if (strcmp(http_req_p->method, "GET") == 0) {
-	strcpy(path, ROOT);
-	strcat(path, http_req_p->uri);
-	
-	/*   */
-	if (stat(path, &status) == -1) {
-	    perror("Error! create_response stat");
-	    exit(1);
-	}
+	dbprintf("create_response: create content for GET method\n");
 
-	if (S_ISDIR(status.st_mode)) {
-	    dbprintf("create_response: S_ISDIR\n");
-	    strcat(path, "/index.html");
-	} else 
-	    dbprintf("create_response: not S_ISDIR\n");
+	// never located this file before
+	if (bufp->path == NULL) {
 
-	// read file
-	if (S_ISREG(status.st_mode)) {
-	    if ((fd = open(path, O_RDONLY)) != -1) {
-		perror("Error! create_response open");
-		exit(1);
+	    strcpy(path, ROOT);
+	    strcat(path, http_req_p->uri);
+
+	    // check if path is valid
+	    if (stat(path, &status) == -1) {
+		perror("Error! create_response stat, send 404 back");
+		push_str(bufp, msg404);
+
+		bufp->response_created = 1; // only this error msg needs to be sent		
+		return bufp->size;
 	    }
 
-	    bufsize = BUF_SIZE - (bufp->buf_tail - bufp->buf_head);
-	    if ((readbytes = read(fd, bufp->buf_tail, bufsize)) <= 0) {
-		perror("Error! create_response read");
-		exit(1);
+	    if (S_ISDIR(status.st_mode)) {
+		strcat(path, "/index.html");
 	    }
-	    bufsize -= readbytes;
-	    bufp->buf_tail += readbytes;
-	    
-	    return 0;
-	} else {
-	    fprintf(stderr, "Error! create_response read");
-	    return 1;
+
+	    // check if path is valid file path
+	    if (stat(path, &status) == -1) {
+		perror("Error! create_response stat, send 404 back");
+		push_str(bufp, msg404);
+
+		bufp->response_created = 1; // only this error msg needs to be sent	
+		return bufp->size;
+		
+	    } else if (S_ISREG(status.st_mode)) {
+		bufp->path = (char *)calloc(strlen(path)+1, sizeof(char));
+		strcpy(bufp->path, path); // ???check error later???
+		dbprintf("create_response: locate file %s\n", bufp->path);
+	    }
 	}
-	
+
+	// file located just now/before
+
+	if (bufp->headers_created == 0) {
+	    push_str(bufp, msg200);
+	    bufp->headers_created = 1;
+	    dbprintf("create_response: headers pushed into buffer\n");
+	}
+
+	if (push_fd(bufp) == 0)
+	    bufp->response_created = 1; // bufp->free_size == 0 OR EOF
+	close(fd);
+
     }
     
-    return 0;
+    return bufp->size;
 
 }
+
+/* return 0 if buf->size == 0  */
+int send_response(int sock, struct buf *bufp) {
+    int sendret;
+
+    if (bufp->size == 0) {
+	dbprintf("send_response: buffer is empty, sending finished\n");
+	return 0;
+    }
+    
+    if ((sendret = send(sock, bufp->buf_head, bufp->size, 0)) == -1) {
+	perror("Error! send_response: send");
+	return -1;
+    }
+
+    bufp->buf_head += sendret;
+    bufp->size -= sendret;
+    // free_size ? if cicular buffer is implemented
+
+    return sendret;
+}
+

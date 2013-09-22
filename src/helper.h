@@ -25,35 +25,49 @@ extern const char GET[];
 extern const char HEAD[];
 extern const char POST[];
 
+extern const char msg404[];
+extern const char msg200[];
+
 extern const char ROOT[];
 
 struct http_req_t {
-char method[METHOD_LEN];
-char uri[URI_LEN];
-char version[VERSION_LEN];
-char host[HOST_LEN];
-char user_agent[UA_LEN];
-int cont_len;
-char cont_type[CONT_TYPE];
-char *contp;
+
+    char method[METHOD_LEN];
+    char uri[URI_LEN];
+    char version[VERSION_LEN];
+    char host[HOST_LEN];
+    char user_agent[UA_LEN];
+    int cont_len;
+    char cont_type[CONT_TYPE];
+    char *contp;
+
 };
 
+
 struct buf {
-char *buf;
-char *sentinal;
 
-char *buf_head;
-char *buf_tail;
+    char *buf;
+    char *sentinal;
 
-int size; // tail - head
-int free_size; // BUF_SIZE - size
+    char *buf_head;
+    char *buf_tail;
 
-int allocated;
+    int size; // tail - head
+    int free_size; // BUF_SIZE - size
+
+    int allocated;
 
 
-struct http_req_t *http_req_p;
-int req_header_received;
-int request_received;
+    struct http_req_t *http_req_p;
+    int req_header_received; // if headers are all received
+    int request_received; // indicate if request is fully received
+    int headers_created; // if header of response is fully created
+    int response_created; // indicate if response including headers is fully created
+
+    int code; // save the result of parse_request
+
+    char *path; // GET/HEAD file path
+    long offset; // keep track of read offset
 
 };
 
@@ -61,5 +75,9 @@ void init_buf(struct buf *bufp);
 void clear_buf(struct buf *bufp);
 void reset_buf(struct buf *bufp);
 int is_2big(int fd);
+
+int push_str(struct buf* bufp, const char *str);
+int push_fd(struct buf* bufp);
+
 
 #endif

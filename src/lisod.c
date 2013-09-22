@@ -43,9 +43,7 @@ int main(int argc, char* argv[])
     }
 
     int sock, client_sock;
-    int bufsize;
     int errcode;
-    ssize_t sendret;
     socklen_t cli_size;
     struct sockaddr_in addr, cli_addr;
     //    char buf[BUF_SIZE];
@@ -151,6 +149,8 @@ int main(int argc, char* argv[])
 
 		    /* errcode, -1:recv error, 0: recv 0, 1: continue reading, 2: finished reading, 3: error, cannot find Content-Length header(POST), 4: other err  */
 		    errcode = recv_request(i, buf_pts[i]);
+
+		    buf_pts[i]->code = errcode;
 		    
 		    if (errcode <= 0) {
 			if (errcode == -1) {
@@ -168,12 +168,13 @@ int main(int argc, char* argv[])
 		    } else if (errcode == 1) {
 			dbprintf("Server: request not fully received\n\n");
 			; // do nothing, continue reading 
-
 		    } else if (errcode == 2) {
 			dbprintf("Server: request just/already received\n");
 			dbprintf("Server: create/continue creating response\n");
-			FD_CLR(i, &master_read_fds);
-			//create_response(buf_pts[i]); // check return code, maybe set master_write_set
+			FD_CLR(i, &master_read_fds); // stop reading 
+			FD_SET(i, &master_write_fds); // start creating reply and sending reply
+			reset_buf(buf_pts[i]); // reset the buffer inside the struct buf
+
 		    } else if (errcode == 3) {
 			dbprintf("Server: error, cannot find Content-Length header\n");
 			// send response back and clear up
@@ -188,22 +189,21 @@ int main(int argc, char* argv[])
 	    /* check fd in write_fds  */
 	    if (FD_ISSET(i, &write_fds)) {
 
-		bufsize = buf_pts[i]->buf_tail - buf_pts[i]->buf_head;
+		// have some content in the buffer to send
+		if (create_response(buf_pts[i]) > 0) {
 
-		if ((sendret = send(i, buf_pts[i]->buf_head, bufsize, 0)) != bufsize) {
-		    perror("Error! send error! ignore it");
-		    fprintf(stderr, "sendret=%ld, readret=%d\n", sendret, bufsize);
+		    dbprintf("Server: buf is not empty, send response\n");
+		    send_response(i, buf_pts[i]);
 
-		}
-		buf_pts[i]->buf_head += sendret;
+		} else {
+		    dbprintf("Server: buf is empty, stop sending\n");
 
-		dbprintf("Server: received %d bytes data, sent %ld bytes back to client_sock %d\n", bufsize, sendret, i); // debug print
+		    // clear up
+		    FD_CLR(i, &master_write_fds);
+		    reset_buf(buf_pts[i]); // do not free the buf, keep it for next read
+		    dbprintf("Server: buf reset\n");
+		}		    
 		
-		/* clear up  */
-		FD_CLR(i, &master_write_fds);
-		reset_buf(buf_pts[i]); // do not free the buf, keep it for next read
-		dbprintf("buf reset\n");
-
 	    } // end FD_ISSET write_fds
 
 	}// end for i
