@@ -166,15 +166,16 @@ int main(int argc, char* argv[])
 			close_socket(i);
 
 		    } else if (errcode == 1) {
+			// do nothing, continue receiving 
 			dbprintf("Server: request not fully received\n\n");
-			; // do nothing, continue reading 
+
 		    } else if (errcode == 2) {
 			dbprintf("Server: request just/already received\n");
-			dbprintf("Server: create/continue creating response\n");
+			
 			FD_CLR(i, &master_read_fds); // stop reading 
 			FD_SET(i, &master_write_fds); // start creating reply and sending reply
 			reset_buf(buf_pts[i]); // reset the buffer inside the struct buf
-
+			dbprintf("Server: after reset_buf, buf:%s\n", buf_pts[i]->buf);
 		    } else if (errcode == 3) {
 			dbprintf("Server: error, cannot find Content-Length header\n");
 			// send response back and clear up
@@ -188,10 +189,11 @@ int main(int argc, char* argv[])
 	    
 	    /* check fd in write_fds  */
 	    if (FD_ISSET(i, &write_fds)) {
+		dbprintf("Server: create/continue creating response\n");
 
 		// have some content in the buffer to send
 		if (create_response(buf_pts[i]) > 0) {
-
+		    
 		    dbprintf("Server: buf is not empty, send response\n");
 		    send_response(i, buf_pts[i]);
 

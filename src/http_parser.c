@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/socket.h>
+#include <time.h>
 
 #include "helper.h"
 #include "http_parser.h"
@@ -175,6 +176,7 @@ int create_response(struct buf *bufp) {
     int fd;
     struct stat status;
     char path[PATH_MAX];
+    char *p;
 
     struct http_req_t *http_req_p = bufp->http_req_p;
 
@@ -198,6 +200,7 @@ int create_response(struct buf *bufp) {
 	    if (stat(path, &status) == -1) {
 		perror("Error! create_response stat, send 404 back");
 		push_str(bufp, msg404);
+		dbprintf("create_response: buffer:%s\n", bufp->buf);
 
 		bufp->response_created = 1; // only this error msg needs to be sent		
 		return bufp->size;
@@ -225,7 +228,29 @@ int create_response(struct buf *bufp) {
 	// file located just now/before
 
 	if (bufp->headers_created == 0) {
+
 	    push_str(bufp, msg200);
+
+	    p = date_str();
+	    push_str(bufp, date_str()); 
+	    free(p);
+	    
+	    p = connection_str();
+	    push_str(bufp, p);
+	    free(p);
+	    
+	    push_str(bufp, server);
+
+	    p = cont_len_str();
+	    push_str(bufp, cont_len_str());
+	    free(p);
+	    
+	    p = cont_type_str();
+	    push_str(bufp, cont_type_str());
+	    free(p);
+
+	    //push_str(bufp, last_modified_str());
+
 	    bufp->headers_created = 1;
 	    dbprintf("create_response: headers pushed into buffer\n");
 	}
@@ -261,3 +286,44 @@ int send_response(int sock, struct buf *bufp) {
     return sendret;
 }
 
+
+char *date_str() {
+
+    time_t rawtime;
+    struct tm *timeinfo;
+    char *time_str = (char *)calloc(128, sizeof(char));
+    
+    rawtime = time(NULL);
+    timeinfo = gmtime(&rawtime);
+
+    strcpy(time_str, asctime(timeinfo));
+    time_str[strlen(time_str)-1] = ' ';
+    strcat(time_str, "GMT\r\n");
+
+    return time_str;
+
+}
+
+char *connection_str() {
+    
+    char *str = (char *)calloc(128, sizeof(char));
+    strcpy(str, "Connection: keep-Alive ????\r\n");
+    
+    return str;
+}
+
+char *cont_len_str() {
+
+    char *str = (char *)calloc(128, sizeof(char));
+    strcpy(str, "Content-Length: ????\r\n");
+    
+    return str;
+}
+
+char *cont_type_str() {
+
+    char *str = (char *)calloc(128, sizeof(char));
+    strcpy(str, "Content-Type: ????\r\n");
+    
+    return str;
+}

@@ -27,6 +27,7 @@ extern const char POST[];
 
 extern const char msg404[];
 extern const char msg200[];
+extern const char server[];
 
 extern const char ROOT[];
 

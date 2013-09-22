@@ -20,6 +20,7 @@ const char POST[] = "POST";
 
 const char msg404[] = "HTTP/1.1 404 NOT FOUND\r\n";
 const char msg200[] = "HTTP/1.1 200 OK\r\n";
+const char server[] = "Liso/1.0";
 
 const char ROOT[] = "../static_site";
 
@@ -121,7 +122,10 @@ void reset_buf(struct buf* bufp) {
     if (bufp->allocated == 1) {
 
 	bufp->buf_head = bufp->buf;
-	bufp->buf_tail = bufp->buf_head;
+	bufp->buf_tail = bufp->buf;
+	// improve memset part later, BUF_SIZE is a too large number
+	// keep track of buf_size inside recv_request method
+	memset(bufp->buf_head, 0, BUF_SIZE); 
 
 	bufp->size = 0;
 	bufp->free_size = BUF_SIZE;
