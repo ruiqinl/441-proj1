@@ -56,6 +56,7 @@ void init_buf(struct buf* bufp){
     bufp->request_received = 0;
     bufp->headers_created = 0;
     bufp->response_created = 0;
+    bufp->read_done = 0;
 
     bufp->code = CODE_UNSET; // the code returned by parse_request
 
@@ -96,10 +97,12 @@ int push_fd(struct buf* bufp) {
     int fd;
     long readret;
 
+    
     if (bufp->free_size == 0) {
-	fprintf(stderr, "Warnning! push_fd: bufp->free_size == 0\n");
-	return 0;
+	dbprintf("Warnning! push_fd: bufp->free_size == 0, wait for sending bytes\n");
+	return 1;
     }
+
 
     if ((fd = open(bufp->path, O_RDONLY)) == -1) {
 	perror("Error! push_fd, open");
@@ -110,29 +113,29 @@ int push_fd(struct buf* bufp) {
     lseek(fd, bufp->offset, SEEK_SET);
 
     if ((readret = read(fd, bufp->buf_tail, bufp->free_size)) == -1) {
-
 	perror("Error! push_fd, read");
 	close(fd);
 	return -1;
+    } 
 
-    } else if (readret < bufp->free_size){
-
-	fprintf(stderr, "push_fd: eof\n");
+    fprintf(stderr, "push_fd: %ld bytes read this time\n", readret);
     
-	bufp->buf_tail += readret;
-	bufp->size += readret;
-	bufp->free_size -= readret;
-	bufp->offset += readret;
-	
+    bufp->buf_tail += readret;
+    bufp->size += readret;
+    bufp->free_size -= readret;
+    bufp->offset += readret;
+
+    if (readret < bufp->free_size){
+	// eof
 	close(fd);
 	return 0;
 
     } else if (readret == bufp->free_size) {
-	// next turn bufp->free_size == 0, thus left data is not read at all
-	// ????????handle this later?????????
+	// send the buffer out, and when the buffer is clear, come back and read again
 	close(fd);
 	return 1;
     }
+
     return 1; // continue reading
 }
 
@@ -149,16 +152,17 @@ void reset_buf(struct buf* bufp) {
 	bufp->size = 0;
 	bufp->free_size = BUF_SIZE;
 	
-	bufp->req_header_received = 0;
-	bufp->request_received = 0;
-	bufp->headers_created = 0;
-	bufp->response_created = 0;
+	//	bufp->req_header_received = 0;
+	//	bufp->request_received = 0;
+	//	bufp->headers_created = 0;
+	//	bufp->response_created = 0;
+	//	bufp->read_done = 0;
 
 	//bufp->code = -2; 
 
 	//free(bufp->path);
 	//bufp->path = NULL;
-	bufp->offset = 0; 
+	//bufp->offset = 0; 
 
     } else 
 	fprintf(stderr, "Warning: reset_buf, buf is not allocated yet\n");

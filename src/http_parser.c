@@ -235,11 +235,36 @@ int create_response(struct buf *bufp) {
     struct http_req_t *http_req_p = bufp->http_req_p;
     int push_ret;
 
-    if (bufp->response_created == 1) {
+    // headers created, file read done, just send left content in the buffer
+    if (bufp->response_created == 1 && bufp->read_done == 1) {
 	// full response has been created, just send rest back to client
 	dbprintf("create_response: no more content to create\n");
 	return bufp->size;
     }
+
+    // headers created, file not read to EOF yet, just continue reading file
+    if (bufp->response_created == 1 && bufp->read_done == 0) {
+	// headers already sent, just read file
+	if ((push_ret = push_fd(bufp)) == 0) {
+	    dbprintf("push_fd: file %s is read through\n", bufp->path);
+	    bufp->read_done = 1;
+	} else if (push_ret == -1) {
+	    fprintf(stderr, "Error! Failed reading file, handle this later\n");
+	    bufp->read_done = 1;
+	} else if (push_ret == 1) {
+	    dbprintf("push_ret: file %s is not read through yet\n", bufp->path);
+	    bufp->read_done = 0;
+	}	
+	return bufp->size;
+    }
+    
+    // impossible situation, just for completion
+    if (bufp->response_created == 0 && bufp->read_done == 1) {
+	fprintf(stderr, "Error! Impossible situation happends: bufp->response_created == 0 && bufp->read_done == 1\n");
+	return bufp->size;
+    }
+
+    // default case below : if (bufp->response_create == 0 && bufp->read_done == 0)
 
     // locate the file
     if (bufp->path == NULL) {
@@ -274,6 +299,7 @@ int create_response(struct buf *bufp) {
 
 	push_header(bufp); // anyway, headers are necessary
 	bufp->response_created = 1;
+	bufp->read_done = 1; // no need to read any file
 	return bufp->size;
     }
 
@@ -286,20 +312,22 @@ int create_response(struct buf *bufp) {
 
 	push_str(bufp, MSG200);
 	push_header(bufp);
+	bufp->response_created = 1;
 	
 	if (strcmp(http_req_p->method, "GET") == 0){
 	    if ((push_ret = push_fd(bufp)) == 0) {
-		bufp->response_created = 1; // bufp->free_size == 0 OR EOF
+		dbprintf("push_fd: file %s is read through\n", bufp->path);
+		bufp->read_done = 1;
 	    } else if (push_ret == -1) {
 		fprintf(stderr, "Error! Failed reading file, handle this later\n");
-		bufp->response_created = 1; // no more stuff to read
+		bufp->read_done = 1;
 	    } else if (push_ret == 1) {
 		dbprintf("push_ret: file %s is not read through yet\n", bufp->path);
-		bufp->response_created = 0;
+		bufp->read_done = 0;
 	    }
 	} else {
 	    // HEAD/POST
-	    bufp->response_created = 1;
+	    bufp->read_done = 1; // no need to read at all
 	}
 
 	// end GET/HEAD/POST
@@ -309,6 +337,7 @@ int create_response(struct buf *bufp) {
 	push_str(bufp, MSG501);
 	push_header(bufp);
 	bufp->response_created = 1;
+	bufp->read_done = 1;
 	dbprintf("create_response: method not implemented\n");
     }
     
@@ -376,6 +405,8 @@ void push_header(struct buf *bufp){
 	push_str(bufp, p);
 	free(p);
 
+	push_str(bufp, CRLF);
+
 	//push_str(bufp, last_modified_str());
 
 	bufp->headers_created = 1;
@@ -400,7 +431,11 @@ int send_response(int sock, struct buf *bufp) {
 
     bufp->buf_head += sendret;
     bufp->size -= sendret;
-    // free_size ? if cicular buffer is implemented
+    bufp->free_size += sendret;
+
+    // if whole buffer is sent, reset buf for possible un-read part of file
+    if (bufp->size == 0) 
+	reset_buf(bufp);
 
     return sendret;
 }

@@ -10,8 +10,8 @@ s = socket(AF_INET, SOCK_STREAM)
 s.connect(("127.0.0.1", 9999))
 #s.connect(("www.google.com", 80))
 
-s.send("GET /images/liso_header.png HTTP/1.1\r\nHos")
-#s.send("GET / HTTP/1.1\r\nHos")
+#s.send("GET /images/liso_header.png HTTP/1.1\r\nHos")
+s.send("GET / HTTP/1.1\r\nHos")
 
 s.send("t: localhost\r\nUser-Agent: Chr")
 
