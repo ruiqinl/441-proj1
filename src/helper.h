@@ -6,14 +6,16 @@
 #define dbprintf(...) do{if(DEBUG) fprintf(stderr, __VA_ARGS__); }while(0)
 
 #define MAX_SOCK 1024
-#define BUF_SIZE 4096
+#define BUF_SIZE 8192
+#define PATH_MAX 1024
 
-#define METHOD_LEN 8
+#define METHOD_LEN 128
 #define URI_LEN 1024
-#define VERSION_LEN 16
+#define VERSION_LEN 128
 #define HOST_LEN 128
-#define UA_LEN 32
-#define CONT_TYPE 128
+#define UA_LEN 128
+#define CONT_TYPE_LEN 128
+#define CONNECT_LEN 128
 
 extern const char CRLF[];
 extern const char CRLF2[];
@@ -25,11 +27,25 @@ extern const char GET[];
 extern const char HEAD[];
 extern const char POST[];
 
-extern const char msg404[];
-extern const char msg200[];
+extern const char MSG200[];
+extern const char MSG404[];
+extern const char MSG411[];
+extern const char MSG500[];
+extern const char MSG501[];
+extern const char MSG503[];
+extern const char MSG505[];
+
 extern const char server[];
 
+extern const char TEXT_HTML[];
+extern const char TEXT_CSS[];
+extern const char IMAGE_PNG[];
+extern const char IMAGE_JPEG[];
+extern const char IMAGE_GIF[];
+
 extern const char ROOT[];
+
+extern const int CODE_UNSET;
 
 struct http_req_t {
 
@@ -39,8 +55,9 @@ struct http_req_t {
     char host[HOST_LEN];
     char user_agent[UA_LEN];
     int cont_len;
-    char cont_type[CONT_TYPE];
+    char cont_type[CONT_TYPE_LEN];
     char *contp;
+    char connection[CONNECT_LEN];
 
 };
 
@@ -55,6 +72,7 @@ struct buf {
 
     int size; // tail - head
     int free_size; // BUF_SIZE - size
+    int cont_actual_len; // the actual size of body in POST
 
     int allocated;
 

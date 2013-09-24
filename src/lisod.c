@@ -54,6 +54,7 @@ int main(int argc, char* argv[])
     int maxfd, i;
     const int ECHO_PORT = atoi(argv[1]);
     struct http_req_t *http_req_p;
+    struct buf temp_buf;
 
     http_req_p = (struct http_req_t *) calloc(1, sizeof(struct http_req_t));
     
@@ -137,9 +138,12 @@ int main(int argc, char* argv[])
 				maxfd = client_sock;
 
 			} else {
-			    /* client_sock is larger than MAX_SOCK, close it 
+			    /* cp1: client_sock is larger than MAX_SOCK, close it 
 			     * client might receive error
-			     */			
+			     * cp2: return 503 service unavailable response ??? how to send msg back???
+			     */
+			    init_buf(&temp_buf);
+			    temp_buf.code = 6;
 			    close_socket(client_sock);
 			}	    
 		    }
@@ -147,10 +151,11 @@ int main(int argc, char* argv[])
 		} else {
 		    /* conneciton socket is ready, read */
 
-		    /* errcode, -1:recv error, 0: recv 0, 1: continue reading, 2: finished reading, 3: error, cannot find Content-Length header(POST), 4: other err  */
-		    errcode = recv_request(i, buf_pts[i]);
+		    /* errcode, -1:recv error, 0: recv 0, 1: continue reading, 2: finished reading, 3: error, cannot find Content-Length header(POST), 4: find no method , 5 buffer overflow , 6 service unavailable--set only when accepting too many client, 7 http version not 1.1 msg505 */
+		    errcode = recv_request(i, buf_pts[i]); // receive and parse request
 
 		    buf_pts[i]->code = errcode;
+		    dbprintf("Server: errcode:%d\n", buf_pts[i]->code);
 		    
 		    if (errcode <= 0) {
 			if (errcode == -1) {
@@ -169,20 +174,24 @@ int main(int argc, char* argv[])
 			// do nothing, continue receiving 
 			dbprintf("Server: request not fully received\n\n");
 
-		    } else if (errcode == 2) {
-			dbprintf("Server: request just/already received\n");
+		    } else {
+			if (errcode == 2)
+			    dbprintf("Server: request just/already received\n");
+			else if (errcode == 3)
+			    fprintf(stderr, "Server: error, POST method, but cannot find Content-Length header\n"); 
+			else if (errcode == 4)
+			    fprintf(stderr, "Server: error, method not found\n");
+			else if (errcode == 5)
+			    fprintf(stderr, "Server: error, buffer overflow\n");
+			else if (errcode == 7)
+			    dbprintf("Server: http version is not 1.1\n");
 			
 			FD_CLR(i, &master_read_fds); // stop reading 
 			FD_SET(i, &master_write_fds); // start creating reply and sending reply
 			reset_buf(buf_pts[i]); // reset the buffer inside the struct buf
 			dbprintf("Server: after reset_buf, buf:%s\n", buf_pts[i]->buf);
-		    } else if (errcode == 3) {
-			dbprintf("Server: error, cannot find Content-Length header\n");
-			// send response back and clear up
-		    } else if (errcode == 4) {
-			dbprintf("Server: other errors\n");
-			// send response back and clear up
-		    }
+
+		    } 
 		    
 		} // end i == socket
 	    } // end FD_ISSET read_fds
@@ -198,12 +207,11 @@ int main(int argc, char* argv[])
 		    send_response(i, buf_pts[i]);
 
 		} else {
-		    dbprintf("Server: buf is empty, stop sending\n");
+		    dbprintf("Server: buf is empty, stop sending, reset buf\n");
 
 		    // clear up
 		    FD_CLR(i, &master_write_fds);
 		    reset_buf(buf_pts[i]); // do not free the buf, keep it for next read
-		    dbprintf("Server: buf reset\n");
 		}		    
 		
 	    } // end FD_ISSET write_fds

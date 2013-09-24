@@ -18,11 +18,24 @@ const char GET[] = "GET";
 const char HEAD[] = "HEAD";
 const char POST[] = "POST";
 
-const char msg404[] = "HTTP/1.1 404 NOT FOUND\r\n";
-const char msg200[] = "HTTP/1.1 200 OK\r\n";
-const char server[] = "Liso/1.0";
+const char MSG200[] = "HTTP/1.1 200 OK\r\n";
+const char MSG404[] = "HTTP/1.1 404 NOT FOUND\r\n";
+const char MSG411[] = "HTTP/1.1 411 LENGTH REQUIRED\r\n";
+const char MSG500[] = "HTTP/1.1 500 INTERNAL SERVER ERROR\r\n";
+const char MSG501[] = "HTTP/1.1 501 NOT IMPLEMENTED\r\n";
+const char MSG503[] = "HTTP/1.1 503 SERCIVE UNAVAILABLE\r\n";
+const char MSG505[] = "HTTP/1.1 505 HTTP VERSION NOT SUPPORTED\r\n";
+
+const char TEXT_HTML[] = "text/html";
+const char TEXT_CSS[] = "text/css";
+const char IMAGE_PNG[] = "image/png";
+const char IMAGE_JPEG[] = "image/jpeg";
+const char IMAGE_GIF[] = "image/gif";
+
+const char server[] = "Server: Liso/1.0\r\n";
 
 const char ROOT[] = "../static_site";
+const int CODE_UNSET = -2;// -2 is not used by parse_request
 
 void init_buf(struct buf* bufp){
 
@@ -44,11 +57,11 @@ void init_buf(struct buf* bufp){
     bufp->headers_created = 0;
     bufp->response_created = 0;
 
-    bufp->code = -2; // the code returned by parse_request
+    bufp->code = CODE_UNSET; // the code returned by parse_request
 
     bufp->path = NULL; // file path
     bufp->offset = 0; // file offest 
-    
+
 }
 
 /* returnt the # of bytes pushed into the buffer  */
@@ -77,6 +90,7 @@ int push_str(struct buf* bufp, const char *str) {
 /* read from file and push to buffer
  * return 0 when bufp->free_size == 0 or EOF
  * return 1 when reading not finished
+ * return -1 on error
  */
 int push_fd(struct buf* bufp) {
     int fd;
@@ -96,7 +110,9 @@ int push_fd(struct buf* bufp) {
     lseek(fd, bufp->offset, SEEK_SET);
 
     if ((readret = read(fd, bufp->buf_tail, bufp->free_size)) == -1) {
+
 	perror("Error! push_fd, read");
+	close(fd);
 	return -1;
 
     } else if (readret < bufp->free_size){
@@ -107,11 +123,14 @@ int push_fd(struct buf* bufp) {
 	bufp->size += readret;
 	bufp->free_size -= readret;
 	bufp->offset += readret;
-
+	
+	close(fd);
 	return 0;
+
     } else if (readret == bufp->free_size) {
 	// next turn bufp->free_size == 0, thus left data is not read at all
 	// ????????handle this later?????????
+	close(fd);
 	return 1;
     }
     return 1; // continue reading
@@ -135,10 +154,10 @@ void reset_buf(struct buf* bufp) {
 	bufp->headers_created = 0;
 	bufp->response_created = 0;
 
-	bufp->code = -2; 
+	//bufp->code = -2; 
 
-	free(bufp->path);
-	bufp->path = NULL;
+	//free(bufp->path);
+	//bufp->path = NULL;
 	bufp->offset = 0; 
 
     } else 
@@ -151,10 +170,11 @@ void clear_buf(struct buf* bufp){
     if (bufp->allocated == 1) {
 	free(bufp->buf);
 	free(bufp->http_req_p);
+	free(bufp->path);
     }
     bufp->buf_head = NULL;
     bufp->buf_tail = NULL;
-    //    bufp->size = 0;
+    bufp->path = NULL;
     
     bufp->allocated = 0;
 }
