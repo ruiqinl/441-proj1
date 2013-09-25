@@ -117,7 +117,7 @@ int parse_request(struct buf *bufp) {
     int len;
     
     p1 = bufp->buf;
-    dbprintf("parse_request:\n\twhole buf received:\n%s\n", p1);
+
     dbprintf("parse_request:\n\tparse result:\n");
 
     if ((p2 = strchr(p1, ' ')) == NULL) {
@@ -277,8 +277,10 @@ int create_response(struct buf *bufp) {
 	if (check_path(bufp) == -1) {
 	    dbprintf("create_response: check_path failed, send msg404 back");
 	    push_str(bufp, MSG404);
+	    push_str(bufp, CRLF);
 	    push_header(bufp);
 	    bufp->response_created = 1; // only this error msg needs to be sent
+	    bufp->read_done = 1;
 	    return bufp->size;
 	}
 		
@@ -317,9 +319,11 @@ int create_response(struct buf *bufp) {
 	if (strcmp(http_req_p->method, "GET") == 0){
 	    if ((push_ret = push_fd(bufp)) == 0) {
 		dbprintf("push_fd: file %s is read through\n", bufp->path);
+		//push_str(bufp, CRLF);
 		bufp->read_done = 1;
 	    } else if (push_ret == -1) {
 		fprintf(stderr, "Error! Failed reading file, handle this later\n");
+		//push_str(bufp, CRLF);
 		bufp->read_done = 1;
 	    } else if (push_ret == 1) {
 		dbprintf("push_ret: file %s is not read through yet\n", bufp->path);
@@ -379,29 +383,26 @@ void push_header(struct buf *bufp){
 
     if (bufp->headers_created == 0) {
 
-	//	push_str(bufp, msg200);
-
 	p = date_str();
-	dbprintf("date_str:%s\n", p);
+	//dbprintf("date_str:%s\n", p);
 	push_str(bufp, p); 
 	free(p);
 	    
 	p = connection_str(bufp);
-	dbprintf("connection_str:%s\n", p);
+	//	dbprintf("connection_str:%s\n", p);
 	push_str(bufp, p);
-
 	free(p);
 	    
-	dbprintf("server:%s\n", server);
+	//	dbprintf("server:%s\n", server);
 	push_str(bufp, server);
 
 	p = cont_len_str(bufp);
-	dbprintf("cont_len_str:%s\n", p);
+	//	dbprintf("cont_len_str:%s\n", p);
 	push_str(bufp, p);
 	free(p);
 	    
 	p = cont_type_str(bufp);
-	dbprintf("cont_type_str:%s\n", p);
+	//	dbprintf("cont_type_str:%s\n", p);
 	push_str(bufp, p);
 	free(p);
 
@@ -428,6 +429,8 @@ int send_response(int sock, struct buf *bufp) {
 	perror("Error! send_response: send");
 	return -1;
     }
+
+    dbprintf("send_response:%d bytes sent this time\n", sendret);
 
     bufp->buf_head += sendret;
     bufp->size -= sendret;
@@ -478,7 +481,7 @@ char *cont_len_str(struct buf *bufp) {
     
     if (stat(bufp->path, &status) == -1) {
 	perror("Error! cont_len_str, stat");
-	strcpy(str, "Content-Length: read error!\r\n");
+	strcpy(str, "Content-Length: 0\r\n");
 	return str;
     }
     
@@ -497,8 +500,8 @@ char *cont_type_str(struct buf *bufp) {
 	sprintf(str, "Content-Type: %s\r\n", TEXT_HTML);
     }
 
-    if ((p = strstr(bufp->path, ".css")) != NULL 
-	&& *(p + strlen(".css")) == '\0')
+    if ((p = strstr(bufp->path, ".css")) != NULL )
+	//	&& *(p + strlen(".css")) == '\0')
 	sprintf(str, "Content-Type: %s\r\n", TEXT_CSS);
 
     if ((p = strstr(bufp->path, ".png")) != NULL 
@@ -512,6 +515,6 @@ char *cont_type_str(struct buf *bufp) {
     if ((p = strstr(bufp->path, ".gif")) != NULL 
 	&& *(p + strlen(".gif")) == '\0')
 	sprintf(str, "Content-Type: %s\r\n", IMAGE_GIF);
-
+    
     return str;
 }

@@ -67,6 +67,7 @@ int main(int argc, char* argv[])
         fprintf(stderr, "Failed creating socket.\n");
         return EXIT_FAILURE;
     }
+    dbprintf("sock %d\n", sock);
 
     addr.sin_family = AF_INET;
     addr.sin_port = htons(ECHO_PORT);
@@ -116,6 +117,7 @@ int main(int argc, char* argv[])
 	    if (FD_ISSET(i, &read_fds)) {
 
 		if (i == sock) {
+		    dbprintf("!!!new connection!!! might be missed!!!\n");
 		    /* listinging sockte is ready, server receives new connection */
 
 		    if ((client_sock = accept(sock, (struct sockaddr *)&cli_addr, &cli_size)) == -1){
@@ -149,9 +151,11 @@ int main(int argc, char* argv[])
 		    }
 		    
 		} else {
+		    dbprintf("In FD_ISSET read_fds %d\n", i);
 		    /* conneciton socket is ready, read */
 
 		    /* errcode, -1:recv error, 0: recv 0, 1: continue reading, 2: finished reading, 3: error, cannot find Content-Length header(POST), 4: find no method , 5 buffer overflow , 6 service unavailable--set only when accepting too many client, 7 http version not 1.1 msg505 */
+		    dbprintf("Server: recv req from sock %d\n", i);
 		    errcode = recv_request(i, buf_pts[i]); // receive and parse request
 
 		    buf_pts[i]->code = errcode;
@@ -166,10 +170,14 @@ int main(int argc, char* argv[])
 			}
 
 			/* clear up  */
+			
+
 			FD_CLR(i, &master_read_fds);
+			
+			
 			clear_buf(buf_pts[i]);
 			close_socket(i);
-
+			
 		    } else if (errcode == 1) {
 			// do nothing, continue receiving 
 			dbprintf("Server: request not fully received\n\n");
@@ -187,8 +195,11 @@ int main(int argc, char* argv[])
 			    dbprintf("Server: http version is not 1.1\n");
 			
 			FD_CLR(i, &master_read_fds); // stop reading 
+
 			FD_SET(i, &master_write_fds); // start creating reply and sending reply
+			
 			reset_buf(buf_pts[i]); // reset the buffer inside the struct buf
+		
 			dbprintf("Server: after reset_buf, buf:%s\n", buf_pts[i]->buf);
 
 		    } 
@@ -198,6 +209,7 @@ int main(int argc, char* argv[])
 	    
 	    /* check fd in write_fds  */
 	    if (FD_ISSET(i, &write_fds)) {
+		dbprintf("\nIn FD_ISSET write_fds %d\n", i);
 		dbprintf("Server: create/continue creating response\n");
 
 		// have some content in the buffer to send
@@ -223,8 +235,8 @@ int main(int argc, char* argv[])
     }
 
     /* clear up  */
-    close_socket(sock);
-    clear_buf_array(buf_pts, maxfd);
+    //close_socket(sock);
+    //clear_buf_array(buf_pts, maxfd);
 
     return EXIT_SUCCESS;
 }

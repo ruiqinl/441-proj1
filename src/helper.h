@@ -63,7 +63,10 @@ struct http_req_t {
 
 
 struct buf {
-
+    
+    char *recv_buf;
+    char *rbufp;
+    
     char *buf;
     char *sentinal;
 
@@ -82,7 +85,7 @@ struct buf {
     int request_received; // indicate if request is fully received
     int headers_created; // if header of response is fully created
     int response_created; // indicate if response including headers is fully created
-int read_done;// indicate if file has been read throghtly
+    int read_done;// indicate if file has been read throghtly
 
     int code; // save the result of parse_request
 
