@@ -14,6 +14,7 @@ const char host[] = "Host:";
 const char user_agent[] = "User-Agent:";
 const char cont_len[] = "Content-Length:";
 const char cont_type[] = "Content-Type:";
+const char connec[] = "Connection:";
 const char GET[] = "GET";
 const char HEAD[] = "HEAD";
 const char POST[] = "POST";

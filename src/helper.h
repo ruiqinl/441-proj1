@@ -9,13 +9,7 @@
 #define BUF_SIZE 8192
 #define PATH_MAX 1024
 
-#define METHOD_LEN 128
-#define URI_LEN 1024
-#define VERSION_LEN 128
-#define HOST_LEN 128
-#define UA_LEN 128
-#define CONT_TYPE_LEN 128
-#define CONNECT_LEN 128
+#define HEADER_LEN 1024
 
 extern const char CRLF[];
 extern const char CRLF2[];
@@ -23,6 +17,7 @@ extern const char host[];
 extern const char user_agent[];
 extern const char cont_len[];
 extern const char cont_type[];
+extern const char connec[];
 extern const char GET[];
 extern const char HEAD[];
 extern const char POST[];
@@ -49,24 +44,21 @@ extern const int CODE_UNSET;
 
 struct http_req_t {
 
-    char method[METHOD_LEN];
-    char uri[URI_LEN];
-    char version[VERSION_LEN];
-    char host[HOST_LEN];
-    char user_agent[UA_LEN];
+    char method[HEADER_LEN];
+    char uri[HEADER_LEN];
+    char version[HEADER_LEN];
+    char host[HEADER_LEN];
+    char user_agent[HEADER_LEN];
     int cont_len;
-    char cont_type[CONT_TYPE_LEN];
+    char cont_type[HEADER_LEN];
     char *contp;
-    char connection[CONNECT_LEN];
+    char connection[HEADER_LEN];
 
 };
 
 
 struct buf {
-    
-    char *recv_buf;
-    char *rbufp;
-    
+
     char *buf;
     char *sentinal;
 
@@ -85,7 +77,7 @@ struct buf {
     int request_received; // indicate if request is fully received
     int headers_created; // if header of response is fully created
     int response_created; // indicate if response including headers is fully created
-    int read_done;// indicate if file has been read throghtly
+int read_done;// indicate if file has been read throghtly
 
     int code; // save the result of parse_request
 

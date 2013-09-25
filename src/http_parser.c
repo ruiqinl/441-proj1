@@ -60,7 +60,7 @@ int recv_request(int sock, struct buf *bufp) {
     dbprintf("recv_request: CRLF2 found\n");
     bufp->req_header_received = 1;
     parse_request(bufp);
-    
+
     dbprintf("recv_request: headers have already been received and parsed\n");
 
     http_req_p = bufp->http_req_p;
@@ -117,7 +117,7 @@ int parse_request(struct buf *bufp) {
     int len;
     
     p1 = bufp->buf;
-
+    dbprintf("parse_request:\n\twhole buf received:\n%s\n", p1);
     dbprintf("parse_request:\n\tparse result:\n");
 
     if ((p2 = strchr(p1, ' ')) == NULL) {
@@ -125,8 +125,8 @@ int parse_request(struct buf *bufp) {
 	strcpy(http_req->method, "cannot_parse_method");
     } else {
 	len = p2 - p1;
-	if (p2-p1 >= METHOD_LEN-1) {
-	    len = METHOD_LEN - 1;
+	if (p2-p1 >= HEADER_LEN-1) {
+	    len = HEADER_LEN - 1;
 	    fprintf(stderr, "Warning! parse_request, method buffer overflow\n");
 	} 
 	strncpy(http_req->method, p1, len);
@@ -141,8 +141,8 @@ int parse_request(struct buf *bufp) {
 	strcpy(http_req->uri, "cannot_parse_uri");
     } else {
 	len = p2 - p1;
-	if (p2 - p1 >= URI_LEN -1) {
-	    len = URI_LEN - 1;
+	if (p2 - p1 >= HEADER_LEN -1) {
+	    len = HEADER_LEN - 1;
 	    fprintf(stderr, "Warning! parse_request, uri buffer overflow\n");
 	}
 	strncpy(http_req->uri, p1, len);
@@ -156,8 +156,8 @@ int parse_request(struct buf *bufp) {
 	strcpy(http_req->version, "cannot_parse_version");
     } else {
 	len = p2 - p1;
-	if (p2 - p1 >= VERSION_LEN - 1) {
-	    len = VERSION_LEN  - 1;
+	if (p2 - p1 >= HEADER_LEN - 1) {
+	    len = HEADER_LEN  - 1;
 	    fprintf(stderr, "Warning! parse_request, version buffer overflow\n");
 	}
 	strncpy(http_req->version, p1, len);
@@ -170,8 +170,8 @@ int parse_request(struct buf *bufp) {
 	p3 += strlen(host);
 	p2 = strstr(p3, CRLF);
 	len = p2 - p3;
-	if (len >= HOST_LEN - 1) {
-	    len = HOST_LEN - 1;
+	if (len >= HEADER_LEN - 1) {
+	    len = HEADER_LEN - 1;
 	    fprintf(stderr, "Warning! parse_request, host buffer overflow\n");
 	}
 	strncpy(http_req->host, p3, len);
@@ -184,8 +184,8 @@ int parse_request(struct buf *bufp) {
 	p3 += strlen(user_agent);
 	p2 = strstr(p3, CRLF);
 	len = p2 - p3;
-	if (len >= UA_LEN - 1) {
-	    len = UA_LEN - 1;
+	if (len >= HEADER_LEN - 1) {
+	    len = HEADER_LEN - 1;
 	    fprintf(stderr, "Warning! parse_reaquest, user_agent buffer overflow\n");
 	}
 	strncpy(http_req->user_agent, p3, len);
@@ -198,10 +198,11 @@ int parse_request(struct buf *bufp) {
 	p3 += strlen(cont_len);
 	p2 = strstr(p3, CRLF);
 	len = p2 - p3;
-	if (len >= buf_size-1) {
-	    len = buf_size - 1;
+	if (len >= HEADER_LEN-1) {
+	    len = HEADER_LEN - 1;
 	    fprintf(stderr, "Warning! parse_request, cont_len buffer overflow\n");
 	}
+	// ??????buf??????
 	strncpy(buf, p3, len);
 	buf[len] = '\0';
 	http_req->cont_len = atoi(buf);
@@ -212,15 +213,30 @@ int parse_request(struct buf *bufp) {
     if ((p3 = strstr(p1, cont_type)) != NULL) {
 	p3 += strlen(cont_type);
 	p2 = strstr(p3, CRLF);
-	len = p3 - p2;
-	if (len >= CONT_TYPE_LEN - 1){
-	    len = CONT_TYPE_LEN - 1;
+	len = p2-p3;;
+	if (len >= HEADER_LEN - 1){
+	    len = HEADER_LEN - 1;
 	    fprintf(stderr, "Warning! parse_request, cont_type buffer overflow\n");
 	}
 	strncpy(http_req->cont_type, p3, len);
 	http_req->cont_type[len] = '\0';
 	dbprintf("http_req->cont_type:%s\n", http_req->cont_type);
     }
+
+    if ((p3 = strstr(p1, connec)) != NULL) {
+	p3 += strlen(connec);
+	p2 = strstr(p3, CRLF);
+	len = p2-p3;
+	if (len >= HEADER_LEN - 1){
+	    len = HEADER_LEN - 1;
+	    fprintf(stderr, "Warning! parse_request, connec buffer overflow\n");
+	}
+	strncpy(http_req->connection, p3, len);
+	http_req->connection[len] = '\0';
+	dbprintf("http_req->connec:%s\n", http_req->connection);
+    }
+
+
 
     // no need to parse body of post, it's handled in recv_request method
 
@@ -278,7 +294,7 @@ int create_response(struct buf *bufp) {
 	    dbprintf("create_response: check_path failed, send msg404 back");
 	    push_str(bufp, MSG404);
 	    push_str(bufp, CRLF);
-	    push_header(bufp);
+	    //push_header(bufp);
 	    bufp->response_created = 1; // only this error msg needs to be sent
 	    bufp->read_done = 1;
 	    return bufp->size;
@@ -319,11 +335,11 @@ int create_response(struct buf *bufp) {
 	if (strcmp(http_req_p->method, "GET") == 0){
 	    if ((push_ret = push_fd(bufp)) == 0) {
 		dbprintf("push_fd: file %s is read through\n", bufp->path);
-		//push_str(bufp, CRLF);
+		push_str(bufp, CRLF);
 		bufp->read_done = 1;
 	    } else if (push_ret == -1) {
 		fprintf(stderr, "Error! Failed reading file, handle this later\n");
-		//push_str(bufp, CRLF);
+		push_str(bufp, CRLF);
 		bufp->read_done = 1;
 	    } else if (push_ret == 1) {
 		dbprintf("push_ret: file %s is not read through yet\n", bufp->path);
@@ -383,32 +399,37 @@ void push_header(struct buf *bufp){
 
     if (bufp->headers_created == 0) {
 
+	//	push_str(bufp, msg200);
+
 	p = date_str();
-	//dbprintf("date_str:%s\n", p);
+	dbprintf("date_str:%s\n", p);
 	push_str(bufp, p); 
 	free(p);
 	    
 	p = connection_str(bufp);
-	//	dbprintf("connection_str:%s\n", p);
+	dbprintf("connection_str:%s\n", p);
 	push_str(bufp, p);
 	free(p);
 	    
-	//	dbprintf("server:%s\n", server);
+	dbprintf("server:%s\n", server);
 	push_str(bufp, server);
 
 	p = cont_len_str(bufp);
-	//	dbprintf("cont_len_str:%s\n", p);
+	dbprintf("cont_len_str:%s\n", p);
 	push_str(bufp, p);
 	free(p);
 	    
 	p = cont_type_str(bufp);
-	//	dbprintf("cont_type_str:%s\n", p);
+	dbprintf("cont_type_str:%s\n", p);
 	push_str(bufp, p);
 	free(p);
 
 	push_str(bufp, CRLF);
 
-	//push_str(bufp, last_modified_str());
+	p = last_modified_str(bufp);
+	dbprintf("last_modified_str:%s\n", p);
+	push_str(bufp, p);
+	free(p);
 
 	bufp->headers_created = 1;
 	dbprintf("create_response: headers pushed into buffer\n");
@@ -429,8 +450,6 @@ int send_response(int sock, struct buf *bufp) {
 	perror("Error! send_response: send");
 	return -1;
     }
-
-    dbprintf("send_response:%d bytes sent this time\n", sendret);
 
     bufp->buf_head += sendret;
     bufp->size -= sendret;
@@ -466,7 +485,7 @@ char *connection_str(struct buf *bufp) {
     
     char *str = (char *)calloc(128, sizeof(char));
 
-    if (strcmp(bufp->http_req_p->connection, "keep-alive") == 0)
+    if (strcmp(bufp->http_req_p->connection, " keep-alive") == 0)
 	strcpy(str, "Connection: keep-alive\r\n");
     else
 	strcpy(str, "Connection: closed\r\n");
@@ -481,13 +500,35 @@ char *cont_len_str(struct buf *bufp) {
     
     if (stat(bufp->path, &status) == -1) {
 	perror("Error! cont_len_str, stat");
-	strcpy(str, "Content-Length: 0\r\n");
+	strcpy(str, "Content-Length:\r\n");
 	return str;
     }
     
     sprintf(str, "Content-Length: %lld\r\n", status.st_size);
 
     return str;
+}
+
+char *last_modified_str(struct buf *bufp) {
+
+    struct tm *timeinfo;
+    char *time_str = (char *)calloc(128, sizeof(char));
+    struct stat status;
+    
+    if (stat(bufp->path, &status) == -1) {
+	perror("Error! last_modified_str, stat");
+	strcpy(time_str, "Last-Modified:\r\n");
+	return time_str;
+    }
+    
+    timeinfo = gmtime(&status.st_mtime);
+
+    strcpy(time_str, "Last-Modified: ");
+    strcat(time_str, asctime(timeinfo));
+    //strcpy(time_str + strlen("Date: ") + strlen(time_str) - 1, "GMT\r\n");
+    //???unable to add GMT???
+
+    return time_str;
 }
 
 char *cont_type_str(struct buf *bufp) {
@@ -500,8 +541,8 @@ char *cont_type_str(struct buf *bufp) {
 	sprintf(str, "Content-Type: %s\r\n", TEXT_HTML);
     }
 
-    if ((p = strstr(bufp->path, ".css")) != NULL )
-	//	&& *(p + strlen(".css")) == '\0')
+    if ((p = strstr(bufp->path, ".css")) != NULL 
+	&& *(p + strlen(".css")) == '\0')
 	sprintf(str, "Content-Type: %s\r\n", TEXT_CSS);
 
     if ((p = strstr(bufp->path, ".png")) != NULL 
@@ -515,6 +556,11 @@ char *cont_type_str(struct buf *bufp) {
     if ((p = strstr(bufp->path, ".gif")) != NULL 
 	&& *(p + strlen(".gif")) == '\0')
 	sprintf(str, "Content-Type: %s\r\n", IMAGE_GIF);
-    
+
     return str;
 }
+
+
+    
+    
+
