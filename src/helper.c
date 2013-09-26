@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include "helper.h"
 
-#define DEBUG 1
+#define DEBUG 0
 
 const char CRLF[] = "\r\n";
 const char CRLF2[] = "\r\n\r\n";
@@ -14,7 +14,6 @@ const char host[] = "Host:";
 const char user_agent[] = "User-Agent:";
 const char cont_len[] = "Content-Length:";
 const char cont_type[] = "Content-Type:";
-const char connec[] = "Connection:";
 const char GET[] = "GET";
 const char HEAD[] = "HEAD";
 const char POST[] = "POST";

@@ -53,10 +53,10 @@ int main(int argc, char* argv[])
     fd_set master_read_fds, master_write_fds;
     int maxfd, i;
     const int ECHO_PORT = atoi(argv[1]);
-    struct http_req_t *http_req_p;
+    //struct http_req_t *http_req_p;
     struct buf temp_buf;
 
-    http_req_p = (struct http_req_t *) calloc(1, sizeof(struct http_req_t));
+    //http_req_p = (struct http_req_t *) calloc(1, sizeof(struct http_req_t));
     
 
     fprintf(stdout, "----- Echo Server -----\n");
@@ -188,7 +188,6 @@ int main(int argc, char* argv[])
 			
 			FD_CLR(i, &master_read_fds); // stop reading 
 			FD_SET(i, &master_write_fds); // start creating reply and sending reply
-
 			reset_buf(buf_pts[i]); // reset the buffer inside the struct buf
 			dbprintf("Server: after reset_buf, buf:%s\n", buf_pts[i]->buf);
 

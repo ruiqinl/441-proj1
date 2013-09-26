@@ -13,7 +13,6 @@ char *date_str();
 char *connection_str(struct buf *bufp);
 char *cont_len_str(struct buf *bufp);
 char *cont_type_str(struct buf *bufp);
-char *last_modified_str(struct buf *bufp);
 int check_path(struct buf *bufp);
 void add_size(struct buf *bufp, int len);
 

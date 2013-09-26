@@ -1,3 +1,16 @@
+
+cp1
+
 1. The server uses an array of pointers to buffer structure to manage the buffers associated with all connected sockets. This implementation sets an upper limit on number of clients that can be connected to the server. Extra clients can be connected to the server, but are sockets are closed immediately without sending any message. So the client might get confused by losing connection for unknown reason.
 
 2. This implementation assumes that messages can be recevied and sent by one call. So if client send long message, server might only receive a piece of it, and send some short piece back to client.
+
+===========================================================
+
+cp2
+
+3. Piped requests is not considered when I first tried to implement lisod, so a single buffer is used to receive request and send response. This cause trouble to receive piped requests. Sharing a single buffer is a dumn idea, I will fix it later by receiving and sending with seperate buffers.
+
+4. Not all sorts of requests are considered. Like, requests with random bytes will block lisod.
+
+5. Forgot to create log file, no time to do that now.

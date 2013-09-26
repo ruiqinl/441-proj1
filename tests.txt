@@ -1,5 +1,5 @@
 
-Test cases:
+Test cases for cp1
 
 $ ./lisod 9999 &
 ----- Echo Server -----
@@ -25,3 +25,46 @@ success!
 Known issues:
 
 Have not found any new issues which have not been resolved yet.
+
+================================================================================
+
+Test cases for check point 2
+
+i) with cp2_checker.py
+
+	Send normal request to lisod in several chunks. lisod can receive and parse the request and send html/css/png back to client correctly.
+
+	Send request to lisod with wrong methods, or version, corresponding status lines can be sent back to client.
+
+	Send random bytes to lisod, lisod get stuck, since it does not detect CRLF end of request and it's expecting more data. I will fix it later.
+
+	Send piped requests to lisod, lisod will only respond to the first request. I did not consider piped requests when started, it's too late to correct it now. Fix it later.
+
+
+ii) with browser
+
+	Run Safari and connect to connect to lisod, everything works in right way.
+
+	Run Chrome to connect to lisod, lisod can only guarantee to send html back to Chrome, css or png are not necessarily sent successfully. Actually, the requests for css or png are not necessarily to be received. I will try to fix that later.
+
+
+
+Known issues:
+
+Piped requests are not implemented yet. 
+Random requests block the lisod. 
+Sarafi can, but Chrome cannot receive complete webpage from lisod.
+
+
+
+
+
+
+
+
+
+
+
+
+
+

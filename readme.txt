@@ -41,6 +41,10 @@ purpose is:
                     .../src/cp1_checker.py      - Python test script for CP1
 		    .../src/helper.c		- Define structure buffer and associated 
 						  functions
+		   .../src/cp2_checker.py     - Python test script for CP2
+		   .../src/http_parser.c	- Define methods to receive, parse and
+						 respond http request
+		   .../src/http_parser.h	- Header file of http_parser.c
 		    .../src/helper.h		- Header file of helper.c
 
 
@@ -53,22 +57,15 @@ Building and executing the echo code should be very simple:
 
                     cd src
                     make
-                    ./echo_server &
-                    ./echo_client 127.0.0.1 9999
+                    ./lisod 9999 &
+		    ./cp2_checker.py
 
-This should allow you to input characters on stdin which will be sent to the
-echo server.  The echo server has a hard-coded serving port of 9999.  Any input
-characters to stdin will be flushed to the server on return, and any bytes
-received from the server will appear on stdout.
+This tests the liso with Python script cp2_checker.py
 
-The test Python script takes a series of arguments and can be run as:
+You can also just connect to lisod via Sarafi(Chrome fails, fix it later).
 
-                    cd src
-                    make
-                    ./echo_server &
-                    ./cp1_checker 127.0.0.1 9999 1000 10 2048 500
 
-with arguments as such:
 
-                    <ip> <port> <# trials> <# writes and reads per trial> \
-                    <max # bytes to write at a time> <# connections> 
+
+
+
