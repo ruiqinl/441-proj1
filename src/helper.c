@@ -6,8 +6,6 @@
 #include <unistd.h>
 #include "helper.h"
 
-#define DEBUG 0
-
 const char CRLF[] = "\r\n";
 const char CRLF2[] = "\r\n\r\n";
 const char host[] = "Host:";
@@ -37,31 +35,51 @@ const char server[] = "Server: Liso/1.0\r\n";
 const char ROOT[] = "../static_site";
 const int CODE_UNSET = -2;// -2 is not used by parse_request
 
+void init_req_queue(struct req_queue *p) {
+    p->req_head = NULL;
+    p->req_tail = NULL;
+    p->req_count = 0;
+}
+
 void init_buf(struct buf* bufp){
 
-    bufp->buf = (char *) calloc(BUF_SIZE, sizeof(char));
-    bufp->sentinal = bufp->buf + BUF_SIZE;
+    bufp->req_queue_p = (struct req_queue *)calloc(1, sizeof(struct req_queue));
+    
+    // reception part
+    init_req_queue(bufp->req_queue_p);
+    bufp->req_line_header_received = 0;
+    bufp->req_fully_received = 1; // see parse_request for reason
+    
+    bufp->http_req_p = bufp->req_queue_p->req_head;
 
+    bufp->rbuf = (char *) calloc(BUF_SIZE, sizeof(char));
+    bufp->rbuf_head = bufp->rbuf;
+    bufp->rbuf_tail = bufp->rbuf;
+    bufp->line_head = bufp->rbuf;
+    bufp->line_tail = bufp->rbuf;
+    bufp->parse_p = bufp->rbuf;
+    bufp->rbuf_free_size = BUF_SIZE;
+    bufp->rbuf_size = 0;
+
+    // response part
+    bufp->http_reply_p = NULL;
+
+    bufp->buf = (char *) calloc(BUF_SIZE, sizeof(char));    
     bufp->buf_head = bufp->buf; // p is not used yet in checkpoint-1
     bufp->buf_tail = bufp->buf_head; // empty buffer, off-1 sentinal
 
-    bufp->size = 0;
-    bufp->free_size = BUF_SIZE;
+    bufp->buf_free_size = BUF_SIZE;
+    bufp->buf_size = 0;
+
+    bufp->res_line_header_created = 0;
+    bufp->res_body_created = 0;
+    bufp->res_fully_created = 0; 
+    bufp->res_fully_sent = 1; // see create_response for reason
+
+    bufp->path = (char *)calloc(PATH_MAX, sizeof(char)); // file path
+    bufp->offset = 0; // file offest 
 
     bufp->allocated = 1;
-
-
-    bufp->http_req_p = (struct http_req_t *) calloc(1, sizeof(struct http_req_t));
-    bufp->req_header_received = 0;
-    bufp->request_received = 0;
-    bufp->headers_created = 0;
-    bufp->response_created = 0;
-    bufp->read_done = 0;
-
-    bufp->code = CODE_UNSET; // the code returned by parse_request
-
-    bufp->path = NULL; // file path
-    bufp->offset = 0; // file offest 
 
 }
 
@@ -70,13 +88,13 @@ int push_str(struct buf* bufp, const char *str) {
     int str_size;
     str_size = strlen(str);
     
-    if (str_size <= bufp->free_size-1) {
+    if (str_size <= bufp->buf_free_size) {
 
-	strcat(bufp->buf_tail, str);
+	strncpy(bufp->buf_tail, str, str_size);
 
 	bufp->buf_tail += str_size;
-	bufp->size += str_size;
-	bufp->free_size -= str_size;
+	bufp->buf_size += str_size;
+	bufp->buf_free_size -= str_size;
 	
 	return str_size;
 
@@ -96,10 +114,9 @@ int push_str(struct buf* bufp, const char *str) {
 int push_fd(struct buf* bufp) {
     int fd;
     long readret;
-
     
-    if (bufp->free_size == 0) {
-	dbprintf("Warnning! push_fd: bufp->free_size == 0, wait for sending bytes\n");
+    if (bufp->buf_free_size == 0) {
+	dbprintf("Warnning! push_fd: bufp->free_size == 0, wait for sending bytes to free some space\n");
 	return 1;
     }
 
@@ -112,7 +129,7 @@ int push_fd(struct buf* bufp) {
     dbprintf("push_fd: seek to previous position %ld and start reading\n", bufp->offset);
     lseek(fd, bufp->offset, SEEK_SET);
 
-    if ((readret = read(fd, bufp->buf_tail, bufp->free_size)) == -1) {
+    if ((readret = read(fd, bufp->buf_tail, bufp->buf_free_size)) == -1) {
 	perror("Error! push_fd, read");
 	close(fd);
 	return -1;
@@ -121,66 +138,58 @@ int push_fd(struct buf* bufp) {
     fprintf(stderr, "push_fd: %ld bytes read this time\n", readret);
     
     bufp->buf_tail += readret;
-    bufp->size += readret;
-    bufp->free_size -= readret;
+    bufp->buf_size += readret;
+    bufp->buf_free_size -= readret;
     bufp->offset += readret;
 
-    if (readret < bufp->free_size){
+    if (readret < bufp->buf_free_size){
 	// eof
 	close(fd);
 	return 0;
 
-    } else if (readret == bufp->free_size) {
+    } else if (readret == bufp->buf_free_size) {
 	// send the buffer out, and when the buffer is clear, come back and read again
 	close(fd);
 	return 1;
     }
 
-    return 1; // continue reading
+    return 1; // this line is not reachable 
 }
 
 
 void reset_buf(struct buf* bufp) {
     if (bufp->allocated == 1) {
 
-	bufp->buf_head = bufp->buf;
-	bufp->buf_tail = bufp->buf;
-	// improve memset part later, BUF_SIZE is a too large number
-	// keep track of buf_size inside recv_request method
 	memset(bufp->buf_head, 0, BUF_SIZE); 
 
-	bufp->size = 0;
-	bufp->free_size = BUF_SIZE;
-	
-	//	bufp->req_header_received = 0;
-	//	bufp->request_received = 0;
-	//	bufp->headers_created = 0;
-	//	bufp->response_created = 0;
-	//	bufp->read_done = 0;
+	bufp->buf_head = bufp->buf;
+	bufp->buf_tail = bufp->buf;
 
-	//bufp->code = -2; 
-
-	//free(bufp->path);
-	//bufp->path = NULL;
-	//bufp->offset = 0; 
+	bufp->buf_size = 0;
+	bufp->buf_free_size = BUF_SIZE;
 
     } else 
 	fprintf(stderr, "Warning: reset_buf, buf is not allocated yet\n");
     
 }
 
-void clear_buf(struct buf* bufp){
+void clear_rbuf(struct buf *bufp) {
 
-    if (bufp->allocated == 1) {
-	free(bufp->buf);
-	free(bufp->http_req_p);
-	free(bufp->path);
-    }
+    free(bufp->rbuf);
+
+}
+
+void clear_buf(struct buf *bufp){
+
+    //if (bufp->allocated == 1) {
+    //free(bufp->rbuf);
+    free(bufp->buf);
+	//}
     bufp->buf_head = NULL;
     bufp->buf_tail = NULL;
     bufp->path = NULL;
     
-    bufp->allocated = 0;
+    //bufp->allocated = 0;
 }
 
 
@@ -190,4 +199,50 @@ int is_2big(int fd) {
 	return 1;
     }
     return 0;
+}
+
+
+void req_enqueue(struct req_queue *q, struct http_req *p) {
+    struct http_req *r;
+
+    if (q->req_head != NULL) {
+	r = q->req_head;
+	while (r->next != NULL)
+	    r = r->next;
+	r->next = p;
+    } else {
+	q->req_head = p;
+    }
+    
+    q->req_count += 1;
+}
+
+struct http_req *req_dequeue(struct req_queue *q) {
+    struct http_req *r;
+
+    if (q->req_head == NULL) {
+	fprintf(stderr, "Error! req_dequeue: req_queue is empty\n");
+	return NULL;
+    }
+    r = q->req_head;
+    q->req_head = r->next;
+
+    q->req_count -= 1;
+    
+    return r;
+}
+
+void print_queue(struct req_queue *q) {
+    struct http_req *p = q->req_head;
+
+    if (p == NULL)
+	printf("print_queue:%d requests\nnull\n", q->req_count);
+
+    printf("print_queue:%d requests\n", q->req_count);
+    while (p != NULL) {
+	printf("request: %s %s %s ...\n", p->method, p->uri, p->version);
+	p = p->next;
+    }
+    
+
 }

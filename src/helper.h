@@ -3,19 +3,13 @@
 
 #include <stdio.h>
 
+#define DEBUG 1
 #define dbprintf(...) do{if(DEBUG) fprintf(stderr, __VA_ARGS__); }while(0)
 
 #define MAX_SOCK 1024
 #define BUF_SIZE 8192
 #define PATH_MAX 1024
-
-#define METHOD_LEN 128
-#define URI_LEN 1024
-#define VERSION_LEN 128
-#define HOST_LEN 128
-#define UA_LEN 128
-#define CONT_TYPE_LEN 128
-#define CONNECT_LEN 128
+#define HEADER_LEN 1024
 
 extern const char CRLF[];
 extern const char CRLF2[];
@@ -47,57 +41,81 @@ extern const char ROOT[];
 
 extern const int CODE_UNSET;
 
-struct http_req_t {
+struct http_req {
 
-    char method[METHOD_LEN];
-    char uri[URI_LEN];
-    char version[VERSION_LEN];
-    char host[HOST_LEN];
-    char user_agent[UA_LEN];
+    char method[HEADER_LEN];
+    char uri[HEADER_LEN];
+    char version[HEADER_LEN];
+    char host[HEADER_LEN];
+    char user_agent[HEADER_LEN];
     int cont_len;
-    char cont_type[CONT_TYPE_LEN];
+    char cont_type[HEADER_LEN];
     char *contp;
-    char connection[CONNECT_LEN];
+    char connection[HEADER_LEN];
+
+    struct http_req *next;
 
 };
 
+struct req_queue {
+
+    struct http_req *req_head;
+    struct http_req *req_tail;
+    int req_count;    
+
+};
 
 struct buf {
 
-    char *buf;
-    char *sentinal;
+    struct req_queue *req_queue_p;
 
+    // reception part
+    struct http_req *http_req_p;
+    int req_line_header_received;
+    int req_body_received;
+    int req_fully_received;
+    int rbuf_req_count;
+
+    char *rbuf;
+    char *rbuf_head;
+    char *rbuf_tail;
+    char *line_head;
+    char *line_tail;
+    char *parse_p;
+    int rbuf_free_size;
+    int rbuf_size;
+
+    // reply part
+    struct http_req *http_reply_p;
+
+    char *buf;
     char *buf_head;
     char *buf_tail;
-
-    int size; // tail - head
-    int free_size; // BUF_SIZE - size
-    int cont_actual_len; // the actual size of body in POST
-
-    int allocated;
-
-
-    struct http_req_t *http_req_p;
-    int req_header_received; // if headers are all received
-    int request_received; // indicate if request is fully received
-    int headers_created; // if header of response is fully created
-    int response_created; // indicate if response including headers is fully created
-int read_done;// indicate if file has been read throghtly
-
-    int code; // save the result of parse_request
+    int buf_size; // tail - head
+    int buf_free_size; // BUF_SIZE - size
+    int res_line_header_created;
+    int res_body_created;
+    int res_fully_created;
+    int res_fully_sent;
 
     char *path; // GET/HEAD file path
     long offset; // keep track of read offset
+
+    int allocated;
 
 };
 
 void init_buf(struct buf *bufp);
 void clear_buf(struct buf *bufp);
+void clear_rbuf(struct buf *bufp);
 void reset_buf(struct buf *bufp);
 int is_2big(int fd);
 
 int push_str(struct buf* bufp, const char *str);
 int push_fd(struct buf* bufp);
 
+void req_enqueue(struct req_queue *q, struct http_req *p);
+struct http_req *req_dequeue(struct req_queue *q);
+void print_queue(struct req_queue *q);
 
 #endif

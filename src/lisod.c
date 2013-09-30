@@ -18,6 +18,7 @@
 #include <arpa/inet.h>
 #include "helper.h"
 #include "http_parser.h"
+#include "http_replyer.h"
 
 
 #define DEBUG 1
@@ -43,7 +44,7 @@ int main(int argc, char* argv[])
     }
 
     int sock, client_sock;
-    int errcode;
+    int recv_ret;
     socklen_t cli_size;
     struct sockaddr_in addr, cli_addr;
     //    char buf[BUF_SIZE];
@@ -53,10 +54,6 @@ int main(int argc, char* argv[])
     fd_set master_read_fds, master_write_fds;
     int maxfd, i;
     const int ECHO_PORT = atoi(argv[1]);
-    //struct http_req_t *http_req_p;
-    struct buf temp_buf;
-
-    //http_req_p = (struct http_req_t *) calloc(1, sizeof(struct http_req_t));
     
 
     fprintf(stdout, "----- Echo Server -----\n");
@@ -138,12 +135,7 @@ int main(int argc, char* argv[])
 				maxfd = client_sock;
 
 			} else {
-			    /* cp1: client_sock is larger than MAX_SOCK, close it 
-			     * client might receive error
-			     * cp2: return 503 service unavailable response ??? how to send msg back???
-			     */
-			    init_buf(&temp_buf);
-			    temp_buf.code = 6;
+			    // ???fix this later????
 			    close_socket(client_sock);
 			}	    
 		    }
@@ -151,67 +143,59 @@ int main(int argc, char* argv[])
 		} else {
 		    /* conneciton socket is ready, read */
 
-		    /* errcode, -1:recv error, 0: recv 0, 1: continue reading, 2: finished reading, 3: error, cannot find Content-Length header(POST), 4: find no method , 5 buffer overflow , 6 service unavailable--set only when accepting too many client, 7 http version not 1.1 msg505 */
-		    errcode = recv_request(i, buf_pts[i]); // receive and parse request
+		    /* recv_ret -1: recv error; 0: recv 0 */
+		    recv_ret = recv_request(i, buf_pts[i]); 
+		    dbprintf("Server: recv_request from sock %d, recv_ret is %d\n", i, recv_ret);
 
-		    buf_pts[i]->code = errcode;
-		    dbprintf("Server: errcode:%d\n", buf_pts[i]->code);
-		    
-		    if (errcode <= 0) {
-			if (errcode == -1) {
-			    perror("Error! recv error! close this socket and clear its buffer");
-			} else if ( errcode == 0) { 
-			    // client socket closed
-			    dbprintf("Server: client_sock %d closed\n",i);
+		    if (recv_ret == 1){
+
+			dbprintf("Server: parse request from sock %d\n", i);
+			parse_request(buf_pts[i]); //set req_count, and push request into req_queue
+			print_queue(buf_pts[i]->req_queue_p);
+
+			// if there is request in req_queue, dequeue one and reply
+			if (buf_pts[i]->req_queue_p->req_count > 0) 
+			    FD_SET(i, &master_write_fds);
+		    } else {
+
+			if (recv_ret == -1) {
+			    perror("Error! Server, recv_request, clearup buf");
+			} else if ( recv_ret == 0) { 
+			    dbprintf("Server: client_sock %d closed, clearup buf\n",i);
 			}
 
 			/* clear up  */
 			FD_CLR(i, &master_read_fds);
-			clear_buf(buf_pts[i]);
-			close_socket(i);
-
-		    } else if (errcode == 1) {
-			// do nothing, continue receiving 
-			dbprintf("Server: request not fully received\n\n");
-
-		    } else {
-			if (errcode == 2)
-			    dbprintf("Server: request just/already received\n");
-			else if (errcode == 3)
-			    fprintf(stderr, "Server: error, POST method, but cannot find Content-Length header\n"); 
-			else if (errcode == 4)
-			    fprintf(stderr, "Server: error, method not found\n");
-			else if (errcode == 5)
-			    fprintf(stderr, "Server: error, buffer overflow\n");
-			else if (errcode == 7)
-			    dbprintf("Server: http version is not 1.1\n");
-			
-			FD_CLR(i, &master_read_fds); // stop reading 
-			FD_SET(i, &master_write_fds); // start creating reply and sending reply
-			reset_buf(buf_pts[i]); // reset the buffer inside the struct buf
-			dbprintf("Server: after reset_buf, buf:%s\n", buf_pts[i]->buf);
-
-		    } 
+			//clear_rbuf(buf_pts[i]);
+			//close_socket(i); not here, in write
+		    }
 		    
 		} // end i == socket
 	    } // end FD_ISSET read_fds
 	    
 	    /* check fd in write_fds  */
 	    if (FD_ISSET(i, &write_fds)) {
-		dbprintf("Server: create/continue creating response\n");
+		dbprintf("Server: create/continue creating response for sock %d\n", i);
 
 		// have some content in the buffer to send
 		if (create_response(buf_pts[i]) > 0) {
-		    
+
 		    dbprintf("Server: buf is not empty, send response\n");
 		    send_response(i, buf_pts[i]);
-
+		    
 		} else {
-		    dbprintf("Server: buf is empty, stop sending, reset buf\n");
-
+		    dbprintf("Server: no more content to create, stop sending, reset buf\n");
+		    
 		    // clear up
-		    FD_CLR(i, &master_write_fds);
+		    buf_pts[i]->res_fully_sent = 1;
 		    reset_buf(buf_pts[i]); // do not free the buf, keep it for next read
+
+		    if (buf_pts[i]->req_queue_p->req_count == 0) {
+			FD_CLR(i, &master_write_fds);
+			//clear_buf(buf_pts[i]);
+			//close_socket(i); // un-comment this line later
+			dbprintf("Server: req_count reaches 0, FD_CLR %d from write_fds, clear buf\n\n\n",i);
+		    }
 		}		    
 		
 	    } // end FD_ISSET write_fds
