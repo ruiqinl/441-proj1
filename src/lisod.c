@@ -174,7 +174,7 @@ int main(int argc, char* argv[])
 			FD_CLR(i, &master_read_fds);
 			FD_CLR(i, &master_write_fds);
 			free(buf_pts[i]);
-			//close_socket(i); // un-comment this line later
+			close_socket(i); // un-comment this line later
 		    }
 		    
 		} // end i == socket
@@ -182,7 +182,7 @@ int main(int argc, char* argv[])
 	    
 	    /* check fd in write_fds  */
 	    if (FD_ISSET(i, &write_fds)) {
-		dbprintf("/nServer: create/continue creating response for sock %d\n", i);
+		dbprintf("\nServer: create/continue creating response for sock %d\n", i);
 
 		// have some content in the buffer to send
 		if (create_response(buf_pts[i]) > 0) {
@@ -200,8 +200,6 @@ int main(int argc, char* argv[])
 		    if (buf_pts[i]->req_queue_p->req_count == 0) {
 		    	FD_CLR(i, &master_write_fds);
 			reset_buf(buf_pts[i]);
-			//clear_buf(buf_pts[i]);
-			//close_socket(i); // un-comment this line later
 			dbprintf("Server: req_count reaches 0, FD_CLR %d from write_fds\n\n",i);
 		    }
 		}		    
