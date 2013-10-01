@@ -10,11 +10,11 @@
 
 default: lisod echo_client
 
-lisod: lisod.c helper.c http_parser.c http_replyer.c
+lisod: lisod.c helper.c http_parser.c http_replyer.c helper.h
 	gcc lisod.c helper.c http_parser.c http_replyer.c -o lisod -Wall -Werror
 
-echo_client: echo_client.c helper.c
-	gcc echo_client.c helper.c -o echo_client -Wall -Werror
+echo_client: echo_client.c helper.c http_replyer.c
+	gcc echo_client.c helper.c http_replyer.c -o echo_client -Wall -Werror
 
 clean:
 	rm -rf lisod echo_client *~

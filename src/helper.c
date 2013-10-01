@@ -4,7 +4,9 @@
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/socket.h>
 #include "helper.h"
+#include "http_replyer.h"
 
 const char CRLF[] = "\r\n";
 const char CRLF2[] = "\r\n\r\n";
@@ -12,9 +14,11 @@ const char host[] = "Host:";
 const char user_agent[] = "User-Agent:";
 const char cont_len[] = "Content-Length:";
 const char cont_type[] = "Content-Type:";
+const char connection[] = "Connection:";
 const char GET[] = "GET";
 const char HEAD[] = "HEAD";
 const char POST[] = "POST";
+const char VERSION[] = "HTTP/1.1";
 
 const char MSG200[] = "HTTP/1.1 200 OK\r\n";
 const char MSG404[] = "HTTP/1.1 404 NOT FOUND\r\n";
@@ -52,8 +56,8 @@ void init_buf(struct buf* bufp){
     
     bufp->http_req_p = bufp->req_queue_p->req_head;
 
-    //bufp->rbuf = (char *) calloc(BUF_SIZE, sizeof(char));
-    memset(bufp->rbuf, 0, BUF_SIZE);
+    bufp->rbuf = (char *) calloc(BUF_SIZE, sizeof(char));
+    //memset(bufp->rbuf, 0, BUF_SIZE);
     bufp->rbuf_head = bufp->rbuf;
     bufp->rbuf_tail = bufp->rbuf;
     bufp->line_head = bufp->rbuf;
@@ -65,8 +69,8 @@ void init_buf(struct buf* bufp){
     // response part
     bufp->http_reply_p = NULL;
 
-    //bufp->buf = (char *) calloc(BUF_SIZE, sizeof(char));    
-    memset(bufp->buf, 0, BUF_SIZE);
+    bufp->buf = (char *) calloc(BUF_SIZE, sizeof(char));    
+    //memset(bufp->buf, 0, BUF_SIZE);
     bufp->buf_head = bufp->buf; // p is not used yet in checkpoint-1
     bufp->buf_tail = bufp->buf_head; // empty buffer, off-1 sentinal
 
@@ -78,8 +82,8 @@ void init_buf(struct buf* bufp){
     bufp->res_fully_created = 0; 
     bufp->res_fully_sent = 1; // see create_response for reason
 
-    //bufp->path = (char *)calloc(PATH_MAX, sizeof(char)); // file path
-    memset(bufp->path, 0, PATH_MAX);
+    bufp->path = (char *)calloc(PATH_MAX, sizeof(char)); // file path
+    //memset(bufp->path, 0, PATH_MAX);
     bufp->offset = 0; // file offest 
 
     bufp->allocated = 1;
@@ -147,7 +151,7 @@ int push_fd(struct buf* bufp) {
     bufp->offset += readret;
 
     if (readret < bufp->buf_free_size){
-	// eof
+	// EOF
 	close(fd);
 	return 0;
 
@@ -164,8 +168,8 @@ int push_fd(struct buf* bufp) {
 void reset_buf(struct buf* bufp) {
     if (bufp->allocated == 1) {
 
-	//memset(bufp->buf_head, 0, BUF_SIZE); // ????what!!!!
-	memset(bufp->buf, 0, BUF_SIZE);
+	//memset(bufp->buf, 0, BUF_SIZE); // for buf array
+	memset(&(bufp->buf[0]), 0, BUF_SIZE); // for buf pointer
 
 	bufp->buf_head = bufp->buf;
 	bufp->buf_tail = bufp->buf;
@@ -181,10 +185,14 @@ void reset_buf(struct buf* bufp) {
 void reset_rbuf(struct buf *bufp) {
     
     if (bufp->allocated == 1) {
-	memset(bufp->rbuf, 0, BUF_SIZE);
+	//memset(bufp->rbuf, 0, BUF_SIZE);
+	memset(&(bufp->rbuf[0]), 0, BUF_SIZE);
     
 	bufp->rbuf_head = bufp->rbuf;
 	bufp->rbuf_tail = bufp->rbuf;
+	bufp->line_head = bufp->rbuf;
+	bufp->line_tail = bufp->rbuf;
+	bufp->parse_p = bufp->rbuf;
     
 	bufp->rbuf_size = 0;
 	bufp->rbuf_free_size = BUF_SIZE;
@@ -234,17 +242,85 @@ struct http_req *req_dequeue(struct req_queue *q) {
     return r;
 }
 
-void print_queue(struct req_queue *q) {
+void dbprint_queue(struct req_queue *q) {
     struct http_req *p = q->req_head;
 
     if (p == NULL)
-	printf("print_queue:%d requests\nnull\n", q->req_count);
+	dbprintf("print_queue:%d requests\nnull\n", q->req_count);
 
-    printf("print_queue:%d requests\n", q->req_count);
+    dbprintf("print_queue:%d requests\n", q->req_count);
     while (p != NULL) {
-	printf("request: %s %s %s ...\n", p->method, p->uri, p->version);
+	dbprintf("request: %s %s %s ...\n", p->method, p->uri, p->version);
 	p = p->next;
     }
     
+
+}
+
+
+void send_error(int sock, const char msg[]) {
+    int flag;
+
+    if ((flag = fcntl(sock, F_GETFL, 0)) == -1)
+	perror("Error! send_error fcntl F_GETFL");
+
+    flag |= O_NONBLOCK;
+
+    if (fcntl(sock, F_SETFL, flag) == -1)
+	perror("Error! send_error fcntl F_SETFL");
+
+    if (send(sock, msg, strlen(msg), 0) == -1)
+	perror("Error! send_error send");
+        
+}
+
+int close_socket(int sock) {
+    if (close(sock))
+    {
+        fprintf(stderr, "Failed closing socket.\n");
+        return 1;
+    }
+    return 0;
+}
+
+int clear_buf(struct buf *bufp){
+    
+    if (bufp->allocated == 0) {
+	fprintf(stderr, "Warnning! clear_buf a buf which is not allocated\n");
+	return -1;
+    }
+
+    free(bufp->http_req_p);
+    free(bufp->req_queue_p);
+    free(bufp->rbuf);
+    free(bufp->buf);
+    free(bufp->path);
+
+    return 0;
+}
+
+void clear_buf_array(struct buf *buf_pts[], int maxfd){
+
+    int i;
+
+    for (i = 0; i <= maxfd; i++ ) {
+	if (buf_pts[i]->allocated == 1) {
+	    free(buf_pts[i]);
+	    //clear_buf(buf_pts[i]);
+	}
+    }
+}
+
+
+void push_error(struct buf *bufp, const char *msg) {
+
+    reset_buf(bufp);
+    push_str(bufp, msg);
+    push_header(bufp);
+    push_str(bufp, CRLF);
+
+    bufp->res_line_header_created = 1;
+    bufp->res_body_created = 1;
+    bufp->res_fully_created = 1;
 
 }

@@ -5,10 +5,10 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <time.h>
+#include <ctype.h>
 
 #include "helper.h"
 #include "http_parser.h"
-
 
 
 /* Return errcode, -1:recv error, 0: recv 0, 1:recv some bytes */
@@ -16,8 +16,17 @@ int recv_request(int sock, struct buf *bufp) {
 
     int readbytes;
 
-    if (bufp->rbuf_free_size == 0)
-	dbprintf("Warnning! recv_request, rbuf_free_size == 0\n");
+    if (bufp->req_fully_received == 1) {
+	reset_rbuf(bufp);
+	dbprintf("recv_request: fully_received==1, reset rbuf\n");
+    }
+    
+    // if free_size == 0, it confuses lisod to think that the client socket is closed
+    if (bufp->rbuf_free_size == 0) {
+    	dbprintf("Warnning! recv_request, rbuf_free_size == 0, send MSG503 back\n");
+	send_error(sock, MSG503); // non_block
+	return 0;
+    }
 
     if ((readbytes = recv(sock, bufp->rbuf_tail, bufp->rbuf_free_size, 0)) <= 0) {
 	if (readbytes < 0 )
@@ -50,7 +59,7 @@ int parse_request(struct buf *bufp) {
 	bufp->parse_p = p;
     }
 
-    // parse every request
+    // parse every possible request in the rbuf
     while (bufp->rbuf_req_count != 0) {
 
 	dbprintf("parse_request: request count %d\n", bufp->rbuf_req_count);
@@ -71,7 +80,12 @@ int parse_request(struct buf *bufp) {
 
 	bufp->req_line_header_received = 1;// update 
 
-	parse_message_body(bufp); // set req_fully_received inside
+	 // set req_fully_received inside
+	if (parse_message_body(bufp) == -1) {
+	    // POST has no Content-Length header
+	    push_error(bufp, MSG411);
+	}
+	    
 
 	// if fully received, enqueue	
 	if (bufp->req_fully_received == 1) {
@@ -109,13 +123,15 @@ int parse_request_line(struct buf *bufp){
     bufp->line_head = bufp->rbuf_head;        
     bufp->line_tail = strstr(bufp->line_head, CRLF); 
    
-    // this should never happend, since at least a CRLF2 exists
     if (bufp->line_tail >= bufp->rbuf_tail) {
+	// this should never happend, since at least a CRLF2 exists
 	dbprintf("request line not found\n");
 	return -1;
     }
     
     p1 = bufp->line_head;
+    while (isspace(*p1))
+	p1++;
 
     if ((p2 = strchr(p1, ' ')) == NULL || p2 > bufp->line_tail) {
 	// cannot find method in this request area
@@ -130,8 +146,10 @@ int parse_request_line(struct buf *bufp){
 	http_req_p->method[len] = '\0';
 
 	p1 += len + 1;
-	dbprintf("http_req->method:%s\n", http_req_p->method);
+	while (isspace(*p1))
+	    p1++;
     }
+    dbprintf("http_req->method:%s\n", http_req_p->method);
 
     
     if ((p2 = strchr(p1, ' ')) == NULL || p2 > bufp->line_tail) {
@@ -147,13 +165,19 @@ int parse_request_line(struct buf *bufp){
 	http_req_p->uri[len] = '\0';
 
 	p1 += len + 1;
-	dbprintf("http_req->uri:%s\n", http_req_p->uri);
+	while (isspace(*p1))
+	    p1++;
     }
-
+    dbprintf("http_req->uri:%s\n", http_req_p->uri);
+    
     if ((p2 = strstr(p1, CRLF)) == NULL || p2 > bufp->line_tail) {
 	// cannot find version
 	strcpy(http_req_p->version, "version_not_found");
     } else {
+
+	while (isspace(*(p2-1)))
+	    --p2;
+
 	len = p2 - p1;
 	if (len >  HEADER_LEN - 1) {
 	    len = HEADER_LEN  - 1;
@@ -163,20 +187,25 @@ int parse_request_line(struct buf *bufp){
 	http_req_p->version[len] = '\0';
 
 	p1 += len + strlen(CRLF);
-	dbprintf("http_req->version:%s\n", http_req_p->version);
     }
+    dbprintf("http_req->version:%s\n", http_req_p->version);
 
     // update line_head and line_tail, a CRLF always exists since at least a CRLF2 is always there
+    // now line_head and line_tail
     bufp->line_head = bufp->line_tail + strlen(CRLF);
-    bufp->line_tail = strstr(bufp->line_head, CRLF);;
+    bufp->line_tail = strstr(bufp->line_head, CRLF);
     if (bufp->line_tail == bufp->line_head)
-	dbprintf("Warnning! headers do not exit\n");
+	dbprintf("Warnning! headers do not exist\n");
+    else {
+	// headers exist, put line_tail to end of headers
+	bufp->line_tail = strstr(bufp->line_head, CRLF2);
+    }
 
     return 0;
 }
 
 
-/* bufp=>line_head and bufp->line_tail have already been updated in method parse_request_line  */
+/* bufp->line_head and bufp->line_tail have already been updated in method parse_request_line  */
 int parse_request_headers(struct buf *bufp) {
 
     char *p1, *p2;
@@ -190,43 +219,63 @@ int parse_request_headers(struct buf *bufp) {
 
     http_req_p = bufp->http_req_p;
 
-    p1 = bufp->line_head;
-    if ((p2 = strstr(p1, host)) != NULL && p2 < bufp->line_tail) {
-	p1 = p2 + strlen(host);
-	len = bufp->line_tail - p1;
+    if ((p1 = strstr(bufp->line_head, host)) != NULL && p1 < bufp->line_tail) {
+
+	p1 += strlen(host);
+	while (isspace(*p1))
+	    ++p1;
+
+	p2 = strstr(p1, CRLF);
+	while (isspace(*(p2-1)))
+	    --p2;
+
+	len = p2 - p1;
 	if (len > HEADER_LEN - 1) {
 	    len = HEADER_LEN - 1;
 	    fprintf(stderr, "Warning! parse_request, host buffer overflow\n");
 	}
 	strncpy(http_req_p->host, p1, len);
 	http_req_p->host[len] = '\0';
-	dbprintf("http_req->host:%s\n", http_req_p->host);
+	
+    } else 
+	strcat(http_req_p->host, "");
+    dbprintf("http_req->host:%s\n", http_req_p->host);
 
-	// update line_head and head_tail
-	bufp->line_head = bufp->line_tail + strlen(CRLF);
-	bufp->line_tail = strstr(bufp->line_head, CRLF);
-    }
+    if ((p1 = strstr(bufp->line_head, user_agent)) != NULL && p1 < bufp->line_tail) {
 
-    p1 = bufp->line_head;
-    if ((p2 = strstr(p1, user_agent)) != NULL && p2 < bufp->line_tail) {
-	p1 = p2 + strlen(user_agent);
-	len = bufp->line_tail - p1;
+	p1 += strlen(user_agent);
+	while (isspace(*p1))
+	    ++p1;
+
+	p2 = strstr(p1, CRLF);
+	while (isspace(*(p2-1)))
+	    --p2;
+
+	len = p2 - p1;
 	if (len > HEADER_LEN - 1) {
 	    len = HEADER_LEN - 1;
 	    fprintf(stderr, "Warning! parse_reaquest, user_agent buffer overflow\n");
 	}
 	strncpy(http_req_p->user_agent, p1, len);
 	http_req_p->user_agent[len] = '\0';
-	dbprintf("http_req->user_agent:%s\n", http_req_p->user_agent);
+	
+    } else 
+	strcat(http_req_p->user_agent, "");
+    dbprintf("http_req->user_agent:%s\n", http_req_p->user_agent);
 
-	// update line_head and head_tail
-	bufp->line_head = bufp->line_tail + strlen(CRLF);
-	bufp->line_tail = strstr(bufp->line_head, CRLF);
-    }
 
-    p1 = bufp->line_head;
-    if ((p2 = strstr(p1, cont_len)) != NULL && p2 < bufp->line_tail) {
-	p1 = p2 + strlen(cont_len);
+    if ((p1 = strstr(bufp->line_head, cont_len)) != NULL && p1 < bufp->line_tail) {
+
+	p1 += strlen(cont_len);
+	while (isspace(*p1))
+	    ++p1;
+
+	p2 = strstr(p1, CRLF);
+	while (isspace(*(p2-1)))
+	    --p2;
+
+	len = p2 - p1;
+
 	len = bufp->line_tail - p1;
 	if (len > tmp_size-1) {
 	    len = tmp_size- 1;
@@ -235,30 +284,57 @@ int parse_request_headers(struct buf *bufp) {
 	strncpy(tmp, p1, len);
 	tmp[len] = '\0';
 	http_req_p->cont_len = atoi(tmp);
-	dbprintf("http_req->cont_len:%d\n", http_req_p->cont_len);
+	
 
-	// update line_head and head_tail
-	bufp->line_head = bufp->line_tail + strlen(CRLF);
-	bufp->line_tail = strstr(bufp->line_head, CRLF);
     }
-    
-    p1 = bufp->line_head;
-    if ((p2 = strstr(p1, cont_type)) != NULL && p2 < bufp->line_tail) {
+    dbprintf("http_req->cont_len:%d\n", http_req_p->cont_len);
+
+
+    if ((p1 = strstr(bufp->line_head, cont_type)) != NULL && p1 < bufp->line_tail) {
+
 	p1 += strlen(cont_type);
-	len = bufp->line_tail - p1;
+	while (isspace(*p1))
+	    ++p1;
+
+	p2 = strstr(p1, CRLF);
+	while (isspace(*(p2-1)))
+	    --p2;
+
+	len = p2 - p1;
+	
 	if (len >= HEADER_LEN - 1){
 	    len = HEADER_LEN - 1;
 	    fprintf(stderr, "Warning! parse_request, cont_type buffer overflow\n");
 	}
 	strncpy(http_req_p->cont_type, p1, len);
 	http_req_p->cont_type[len] = '\0';
-	dbprintf("http_req->cont_type:%s\n", http_req_p->cont_type);
-    }
+    } else 
+	strcat(http_req_p->cont_type, "");
+    dbprintf("http_req->cont_type:%s\n", http_req_p->cont_type);
 
-    // update line_head and head_tail
-    bufp->line_head = bufp->line_tail + strlen(CRLF);
-    bufp->line_tail = strstr(bufp->line_head, CRLF);
-    
+
+    if ((p1 = strstr(bufp->line_head, connection)) != NULL && p1 < bufp->line_tail) {
+
+	p1 += strlen(connection);
+	while (isspace(*p1))
+	    ++p1;
+
+	p2 = strstr(p1, CRLF);
+	while (isspace(*(p2-1)))
+	    --p2;
+
+	len = p2 - p1;
+	
+	if (len >= HEADER_LEN - 1){
+	    len = HEADER_LEN - 1;
+	    fprintf(stderr, "Warning! parse_request, cont_type buffer overflow\n");
+	}
+	strncpy(http_req_p->connection, p1, len);
+	http_req_p->connection[len] = '\0';
+    } else 
+	strcat(http_req_p->connection, "");
+    dbprintf("http_req->connection:%s\n", http_req_p->connection);
+
     return 0;
 }
 
@@ -276,6 +352,7 @@ int parse_message_body(struct buf *bufp) {
     /* POST does not appear in piped request, so all left bytes are message body */
     if (bufp->http_req_p->cont_len == 0) {
 	fprintf(stderr, "Error! POST method does not has Content-Length header\n");
+	bufp->req_fully_received = 1;
 	return -1;
     }
 

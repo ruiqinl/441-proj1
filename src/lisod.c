@@ -21,21 +21,6 @@
 #include "http_replyer.h"
 
 
-#define DEBUG 1
-
-
-int close_socket(int sock)
-{
-    if (close(sock))
-    {
-        fprintf(stderr, "Failed closing socket.\n");
-        return 1;
-    }
-    return 0;
-}
-
-void clear_buf_array(struct buf *buf_pts[], int maxfd);
-
 int main(int argc, char* argv[])
 {
     if (argc < 2) {
@@ -47,7 +32,6 @@ int main(int argc, char* argv[])
     int recv_ret;
     socklen_t cli_size;
     struct sockaddr_in addr, cli_addr;
-    //    char buf[BUF_SIZE];
     struct buf* buf_pts[MAX_SOCK]; // array of pointers to struct buf
     char clientIP[INET6_ADDRSTRLEN];
     fd_set read_fds, write_fds;
@@ -128,6 +112,7 @@ int main(int argc, char* argv[])
 			    FD_SET(client_sock, &master_read_fds);
 			    buf_pts[client_sock] = (struct buf*) calloc(1, sizeof(struct buf));
 			    init_buf(buf_pts[client_sock]); // initialize struct buf
+
 			    dbprintf("buf_pts[%d] allocated, rbuf_free_size:%d\n", client_sock, buf_pts[client_sock]->rbuf_free_size);
 
 			    /* track maxfd */
@@ -135,8 +120,7 @@ int main(int argc, char* argv[])
 				maxfd = client_sock;
 
 			} else {
-			    // ???fix this later????
-			    dbprintf("Server: fixt this!!!");
+			    send_error(client_sock, MSG503); // send MSG503 back to client in non-block way
 			    close_socket(client_sock);
 			}	    
 		    }
@@ -145,18 +129,18 @@ int main(int argc, char* argv[])
 		    /* conneciton socket is ready, read */
 
 		    /* recv_ret -1: recv error; 0: recv 0; 1: recv some bytes */
-		    dbprintf("Server: buf_pts[%d]->rbuf_free_size:%d\n", i, buf_pts[i]->rbuf_free_size);
-
 		    recv_ret = recv_request(i, buf_pts[i]); 
+
+		    dbprintf("===========================================================\n");
 		    dbprintf("Server: recv_request from sock %d, recv_ret is %d\n", i, recv_ret);
 
 		    if (recv_ret == 1){
 
 			dbprintf("Server: parse request from sock %d\n", i);
 			parse_request(buf_pts[i]); //set req_count, and push request into req_queue
-			print_queue(buf_pts[i]->req_queue_p);
+			dbprint_queue(buf_pts[i]->req_queue_p);
 
-			// if there is request in req_queue, dequeue one and reply
+			// if there is request in req_queue, set fd in master_write_fds and reply
 			if (buf_pts[i]->req_queue_p->req_count > 0) {
 			    FD_SET(i, &master_write_fds);
 			    dbprintf("Server: set %d into master_write_fds\n", i);
@@ -172,9 +156,9 @@ int main(int argc, char* argv[])
 
 			/* clear up  */
 			FD_CLR(i, &master_read_fds);
-			FD_CLR(i, &master_write_fds);
-			free(buf_pts[i]);
-			close_socket(i); // un-comment this line later
+			FD_CLR(i, &master_write_fds); 
+			clear_buf(buf_pts[i]);
+			close_socket(i);
 		    }
 		    
 		} // end i == socket
@@ -182,6 +166,7 @@ int main(int argc, char* argv[])
 	    
 	    /* check fd in write_fds  */
 	    if (FD_ISSET(i, &write_fds)) {
+
 		dbprintf("\nServer: create/continue creating response for sock %d\n", i);
 
 		// have some content in the buffer to send
@@ -203,13 +188,9 @@ int main(int argc, char* argv[])
 			dbprintf("Server: req_count reaches 0, FD_CLR %d from write_fds\n\n",i);
 		    }
 		}		    
-		
+
 	    } // end FD_ISSET write_fds
-
 	}// end for i
-
-	/*   */
-
     }
 
     /* clear up  */
@@ -220,18 +201,4 @@ int main(int argc, char* argv[])
 }
 
 
-void clear_buf_array(struct buf *buf_pts[], int maxfd){
-
-    int i;
-
-    for (i = 0; i <= maxfd; i++ ) {
-	if (buf_pts[i]->allocated == 1) {
-	    dbprintf("before clear_buf send, alloc:%d\n", buf_pts[i]->allocated);
-	    //	    clear_buf(buf_pts[i]);
-	    free(buf_pts[i]);
-	    dbprintf("before clear_buf send, alloc:%d\n", buf_pts[i]->allocated);
-	}
-    }
-
-}
 

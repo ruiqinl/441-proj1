@@ -17,6 +17,8 @@ extern const char host[];
 extern const char user_agent[];
 extern const char cont_len[];
 extern const char cont_type[];
+extern const char connection[];
+extern const char VERSION[];
 extern const char GET[];
 extern const char HEAD[];
 extern const char POST[];
@@ -76,7 +78,8 @@ struct buf {
     int req_fully_received;
     int rbuf_req_count;
 
-    char rbuf[BUF_SIZE];
+    //    char rbuf[BUF_SIZE];
+    char *rbuf;
     char *rbuf_head;
     char *rbuf_tail;
     char *line_head;
@@ -88,20 +91,23 @@ struct buf {
     // reply part
     struct http_req *http_reply_p;
 
-    char buf[BUF_SIZE];
+    //    char buf[BUF_SIZE];
+    char *buf;
     char *buf_head;
     char *buf_tail;
     int buf_size; // tail - head
     int buf_free_size; // BUF_SIZE - size
+
     int res_line_header_created;
     int res_body_created;
     int res_fully_created;
     int res_fully_sent;
 
-    //    char *path; // GET/HEAD file path
-    char path[PATH_MAX];
+    char *path; // GET/HEAD file path
+    //    char path[PATH_MAX];
     long offset; // keep track of read offset
 
+    
     int allocated;
 
 };
@@ -115,9 +121,16 @@ int is_2big(int fd);
 
 int push_str(struct buf* bufp, const char *str);
 int push_fd(struct buf* bufp);
+void push_error(struct buf *bufp, const char *msg);
+
+void send_error(int sock, const char msg[]);
 
 void req_enqueue(struct req_queue *q, struct http_req *p);
 struct http_req *req_dequeue(struct req_queue *q);
-void print_queue(struct req_queue *q);
+void dbprint_queue(struct req_queue *q);
+
+int close_socket(int sock);
+int clear_buf(struct buf *bufp);
+void clear_buf_array(struct buf *buf_pts[], int maxfd);
 
 #endif
