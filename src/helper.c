@@ -52,7 +52,8 @@ void init_buf(struct buf* bufp){
     
     bufp->http_req_p = bufp->req_queue_p->req_head;
 
-    bufp->rbuf = (char *) calloc(BUF_SIZE, sizeof(char));
+    //bufp->rbuf = (char *) calloc(BUF_SIZE, sizeof(char));
+    memset(bufp->rbuf, 0, BUF_SIZE);
     bufp->rbuf_head = bufp->rbuf;
     bufp->rbuf_tail = bufp->rbuf;
     bufp->line_head = bufp->rbuf;
@@ -64,7 +65,8 @@ void init_buf(struct buf* bufp){
     // response part
     bufp->http_reply_p = NULL;
 
-    bufp->buf = (char *) calloc(BUF_SIZE, sizeof(char));    
+    //bufp->buf = (char *) calloc(BUF_SIZE, sizeof(char));    
+    memset(bufp->buf, 0, BUF_SIZE);
     bufp->buf_head = bufp->buf; // p is not used yet in checkpoint-1
     bufp->buf_tail = bufp->buf_head; // empty buffer, off-1 sentinal
 
@@ -76,7 +78,8 @@ void init_buf(struct buf* bufp){
     bufp->res_fully_created = 0; 
     bufp->res_fully_sent = 1; // see create_response for reason
 
-    bufp->path = (char *)calloc(PATH_MAX, sizeof(char)); // file path
+    //bufp->path = (char *)calloc(PATH_MAX, sizeof(char)); // file path
+    memset(bufp->path, 0, PATH_MAX);
     bufp->offset = 0; // file offest 
 
     bufp->allocated = 1;
@@ -122,6 +125,7 @@ int push_fd(struct buf* bufp) {
 
 
     if ((fd = open(bufp->path, O_RDONLY)) == -1) {
+	dbprintf("bufp->path:%s\n", bufp->path);
 	perror("Error! push_fd, open");
 	return -1;
     }
@@ -160,7 +164,8 @@ int push_fd(struct buf* bufp) {
 void reset_buf(struct buf* bufp) {
     if (bufp->allocated == 1) {
 
-	memset(bufp->buf_head, 0, BUF_SIZE); 
+	//memset(bufp->buf_head, 0, BUF_SIZE); // ????what!!!!
+	memset(bufp->buf, 0, BUF_SIZE);
 
 	bufp->buf_head = bufp->buf;
 	bufp->buf_tail = bufp->buf;
@@ -173,24 +178,21 @@ void reset_buf(struct buf* bufp) {
     
 }
 
-void clear_rbuf(struct buf *bufp) {
-
-    free(bufp->rbuf);
-
-}
-
-void clear_buf(struct buf *bufp){
-
-    //if (bufp->allocated == 1) {
-    //free(bufp->rbuf);
-    free(bufp->buf);
-	//}
-    bufp->buf_head = NULL;
-    bufp->buf_tail = NULL;
-    bufp->path = NULL;
+void reset_rbuf(struct buf *bufp) {
     
-    //bufp->allocated = 0;
+    if (bufp->allocated == 1) {
+	memset(bufp->rbuf, 0, BUF_SIZE);
+    
+	bufp->rbuf_head = bufp->rbuf;
+	bufp->rbuf_tail = bufp->rbuf;
+    
+	bufp->rbuf_size = 0;
+	bufp->rbuf_free_size = BUF_SIZE;
+    } else 
+	fprintf(stderr, "Warnning: reset_rbuf, buf is not allocated yet\n");
+    
 }
+
 
 
 int is_2big(int fd) {

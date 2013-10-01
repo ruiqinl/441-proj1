@@ -16,6 +16,9 @@ int recv_request(int sock, struct buf *bufp) {
 
     int readbytes;
 
+    if (bufp->rbuf_free_size == 0)
+	dbprintf("Warnning! recv_request, rbuf_free_size == 0\n");
+
     if ((readbytes = recv(sock, bufp->rbuf_tail, bufp->rbuf_free_size, 0)) <= 0) {
 	if (readbytes < 0 )
 	    return -1;
@@ -53,7 +56,7 @@ int parse_request(struct buf *bufp) {
 	dbprintf("parse_request: request count %d\n", bufp->rbuf_req_count);
 
 	// calloc http_req
-	if (bufp->req_fully_received) {
+	if (bufp->req_fully_received == 1) {
 	    //dbprintf("parse_request: start parsing new request\n");
 	    bufp->http_req_p = (struct http_req *)calloc(1, sizeof(struct http_req));
 
@@ -68,10 +71,10 @@ int parse_request(struct buf *bufp) {
 
 	bufp->req_line_header_received = 1;// update 
 
-	parse_message_body(bufp);
+	parse_message_body(bufp); // set req_fully_received inside
 
 	// if fully received, enqueue	
-	if (bufp->req_fully_received) {
+	if (bufp->req_fully_received == 1) {
 	    dbprintf("parse_request: req fully received\n");
 
 	    // update req_queue

@@ -76,7 +76,7 @@ struct buf {
     int req_fully_received;
     int rbuf_req_count;
 
-    char *rbuf;
+    char rbuf[BUF_SIZE];
     char *rbuf_head;
     char *rbuf_tail;
     char *line_head;
@@ -88,7 +88,7 @@ struct buf {
     // reply part
     struct http_req *http_reply_p;
 
-    char *buf;
+    char buf[BUF_SIZE];
     char *buf_head;
     char *buf_tail;
     int buf_size; // tail - head
@@ -98,7 +98,8 @@ struct buf {
     int res_fully_created;
     int res_fully_sent;
 
-    char *path; // GET/HEAD file path
+    //    char *path; // GET/HEAD file path
+    char path[PATH_MAX];
     long offset; // keep track of read offset
 
     int allocated;
@@ -106,9 +107,10 @@ struct buf {
 };
 
 void init_buf(struct buf *bufp);
-void clear_buf(struct buf *bufp);
-void clear_rbuf(struct buf *bufp);
+//void clear_buf(struct buf *bufp);
+//void clear_rbuf(struct buf *bufp);
 void reset_buf(struct buf *bufp);
+void reset_rbuf(struct buf *bufp);
 int is_2big(int fd);
 
 int push_str(struct buf* bufp, const char *str);
