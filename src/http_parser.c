@@ -64,20 +64,18 @@ int parse_request(struct buf *bufp) {
 	bufp->parse_p = p;
     }
 
+    if (bufp->rbuf_req_count == 0)
+	bufp->req_fully_received = 0;
+
     // parse every possible request in the rbuf
     while (bufp->rbuf_req_count != 0) {
 
 	dbprintf("parse_request: request count %d\n", bufp->rbuf_req_count);
 
 	// calloc http_req
-	if (bufp->req_fully_received == 1) {
-	    //dbprintf("parse_request: start parsing new request\n");
-	    bufp->http_req_p = (struct http_req *)calloc(1, sizeof(struct http_req));
-
-	    bufp->req_fully_received = 0;
-	    bufp->req_line_header_received = 0;
-
-	}
+	bufp->http_req_p = (struct http_req *)calloc(1, sizeof(struct http_req));
+	bufp->req_fully_received = 0;
+	bufp->req_line_header_received = 0;
 
 	// parse req
 	parse_request_line(bufp);
@@ -125,7 +123,7 @@ int parse_request_line(struct buf *bufp){
 
     http_req_p = bufp->http_req_p;
     
-    bufp->line_head = bufp->rbuf_head;        
+    bufp->line_head = bufp->rbuf_head; 
     bufp->line_tail = strstr(bufp->line_head, CRLF); 
    
     if (bufp->line_tail >= bufp->rbuf_tail) {
@@ -134,6 +132,7 @@ int parse_request_line(struct buf *bufp){
 	return -1;
     }
     
+
     p1 = bufp->line_head;
     while (isspace(*p1))
 	p1++;
@@ -147,12 +146,14 @@ int parse_request_line(struct buf *bufp){
 	    len = HEADER_LEN - 1;
 	    fprintf(stderr, "Warning! parse_request, method buffer overflow\n");
 	} 
+	dbprintf("method:%p", http_req_p->method);
 	strncpy(http_req_p->method, p1, len);
 	http_req_p->method[len] = '\0';
 
 	p1 += len + 1;
 	while (isspace(*p1))
 	    p1++;
+
     }
     dbprintf("http_req->method:%s\n", http_req_p->method);
 

@@ -50,6 +50,7 @@ void init_buf(struct buf* bufp){
     bufp->req_queue_p = (struct req_queue *)calloc(1, sizeof(struct req_queue));
     
     // reception part
+    bufp->http_req_p = (struct http_req *)calloc(1, sizeof(struct http_req));
     init_req_queue(bufp->req_queue_p);
     bufp->req_line_header_received = 0;
     bufp->req_fully_received = 1; // see parse_request for reason
