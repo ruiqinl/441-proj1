@@ -2,8 +2,9 @@
 #define _HELPER_H_
 
 #include <stdio.h>
+#include <openssl/ssl.h>
 
-#define DEBUG 1
+#define DEBUG 0
 #define dbprintf(...) do{if(DEBUG) fprintf(stderr, __VA_ARGS__); }while(0)
 
 #define MAX_SOCK 1024
@@ -110,11 +111,12 @@ struct buf {
     
     int allocated;
 
+    SSL *client_context;
+
 };
 
 void init_buf(struct buf *bufp);
-//void clear_buf(struct buf *bufp);
-//void clear_rbuf(struct buf *bufp);
+int init_ssl_contex(struct buf *bufp, SSL_CTX *ssl_contex, int sock);
 void reset_buf(struct buf *bufp);
 void reset_rbuf(struct buf *bufp);
 int is_2big(int fd);

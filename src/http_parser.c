@@ -28,19 +28,24 @@ int recv_request(int sock, struct buf *bufp) {
 	return 0;
     }
 
-    if ((readbytes = recv(sock, bufp->rbuf_tail, bufp->rbuf_free_size, 0)) <= 0) {
-	if (readbytes < 0 )
-	    return -1;
-	else 
-	    return 0;
-    }
+
+    if (bufp->client_context != NULL) 
+	// ssl socket
+	readbytes = SSL_read(bufp->client_context, bufp->rbuf_tail, bufp->rbuf_free_size);
+    else 
+	// non-ssl socket
+	readbytes = recv(sock, bufp->rbuf_tail, bufp->rbuf_free_size, 0);
 
     // update rbuf
     bufp->rbuf_tail += readbytes; 
     bufp->rbuf_size += readbytes;
     bufp->rbuf_free_size -= readbytes;
     //dbprintf("recv_request:\nwhat recv this time:\n%s\n", bufp->rbuf_tail-readbytes);
-    
+
+    if (readbytes < 0 )
+	return -1;
+    else if (readbytes == 0)
+	return 0;
     return 1;
 }
 
@@ -50,7 +55,7 @@ int parse_request(struct buf *bufp) {
     char *p;
     
     p = bufp->parse_p;
-    //dbprintf("parse_request:\n\trbuf left to parse:\n%s\n", p);
+    dbprintf("parse_request:\n\trbuf left to parse:\n%s\n", p);
 
     // count request number based on CRLF2
     while ((p = strstr(p, CRLF2)) != NULL && p < bufp->rbuf_tail) {

@@ -81,12 +81,37 @@ void init_buf(struct buf* bufp){
     bufp->res_body_created = 0;
     bufp->res_fully_created = 0; 
     bufp->res_fully_sent = 1; // see create_response for reason
-
+ 
     bufp->path = (char *)calloc(PATH_MAX, sizeof(char)); // file path
     //memset(bufp->path, 0, PATH_MAX);
     bufp->offset = 0; // file offest 
 
     bufp->allocated = 1;
+    bufp->client_context = NULL;
+
+}
+
+int init_ssl_contex(struct buf *bufp, SSL_CTX *ssl_context, int sock) {
+
+    if (bufp->client_context != NULL) 
+	fprintf(stderr, "Warning! init_ssl_contex, contex already exists\n");
+
+    if ((bufp->client_context = SSL_new(ssl_context)) == NULL) {
+	fprintf(stderr, "Error! init_ssl_contex");
+	return -1;
+    }
+    
+    if (SSL_set_fd(bufp->client_context, sock) == 0) {
+	fprintf(stderr, "Error! SSL_set_fd\n");
+	return -1;
+    }
+
+    if (SSL_accept(bufp->client_context) <= 0) {
+	fprintf(stderr, "Error! SSL_accept\n");
+	return -1;
+    }
+
+    return 0;
 
 }
 
@@ -295,6 +320,10 @@ int clear_buf(struct buf *bufp){
     free(bufp->rbuf);
     free(bufp->buf);
     free(bufp->path);
+    free(bufp->client_context);
+    
+    bufp->allocated = 0;
+    bufp->client_context = NULL;
 
     return 0;
 }
