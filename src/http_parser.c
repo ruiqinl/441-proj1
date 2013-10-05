@@ -146,7 +146,6 @@ int parse_request_line(struct buf *bufp){
 	    len = HEADER_LEN - 1;
 	    fprintf(stderr, "Warning! parse_request, method buffer overflow\n");
 	} 
-	dbprintf("method:%p", http_req_p->method);
 	strncpy(http_req_p->method, p1, len);
 	http_req_p->method[len] = '\0';
 

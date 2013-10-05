@@ -5,8 +5,12 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <openssl/ssl.h>
+
 #include "helper.h"
 #include "http_replyer.h"
+#include "cgi_parser.h"
 
 const char CRLF[] = "\r\n";
 const char CRLF2[] = "\r\n\r\n";
@@ -35,9 +39,12 @@ const char IMAGE_JPEG[] = "image/jpeg";
 const char IMAGE_GIF[] = "image/gif";
 
 const char server[] = "Server: Liso/1.0\r\n";
+const char CGI[] = "/cgi/";
 
 const char ROOT[] = "../static_site";
 const int CODE_UNSET = -2;// -2 is not used by parse_request
+
+int cgi_fds[MAX_SOCK];
 
 void init_req_queue(struct req_queue *p) {
     p->req_head = NULL;
@@ -45,7 +52,7 @@ void init_req_queue(struct req_queue *p) {
     p->req_count = 0;
 }
 
-void init_buf(struct buf* bufp){
+void init_buf(struct buf* bufp, const char *cgiscript){
 
     bufp->req_queue_p = (struct req_queue *)calloc(1, sizeof(struct req_queue));
     
@@ -58,7 +65,6 @@ void init_buf(struct buf* bufp){
     bufp->http_req_p = bufp->req_queue_p->req_head;
 
     bufp->rbuf = (char *) calloc(BUF_SIZE, sizeof(char));
-    //memset(bufp->rbuf, 0, BUF_SIZE);
     bufp->rbuf_head = bufp->rbuf;
     bufp->rbuf_tail = bufp->rbuf;
     bufp->line_head = bufp->rbuf;
@@ -67,7 +73,7 @@ void init_buf(struct buf* bufp){
     bufp->rbuf_free_size = BUF_SIZE;
     bufp->rbuf_size = 0;
 
-    // response part
+    // reply part
     bufp->http_reply_p = NULL;
 
     bufp->buf = (char *) calloc(BUF_SIZE, sizeof(char));    
@@ -84,13 +90,19 @@ void init_buf(struct buf* bufp){
     bufp->res_fully_sent = 1; // see create_response for reason
  
     bufp->path = (char *)calloc(PATH_MAX, sizeof(char)); // file path
-    //memset(bufp->path, 0, PATH_MAX);
     bufp->offset = 0; // file offest 
 
     bufp->allocated = 1;
+
+    // ssl part
     bufp->client_context = NULL;
 
+    // cgi part
+    bufp->port = 0;
+    bufp->cgiscript = cgiscript;
+
 }
+
 
 int init_ssl_contex(struct buf *bufp, SSL_CTX *ssl_context, int sock) {
 
@@ -237,6 +249,9 @@ int is_2big(int fd) {
     return 0;
 }
 
+struct http_req *req_peek(struct req_queue *q) {
+    return q->req_head;
+}
 
 void req_enqueue(struct req_queue *q, struct http_req *p) {
     struct http_req *r;
@@ -352,5 +367,97 @@ void push_error(struct buf *bufp, const char *msg) {
     bufp->res_line_header_created = 1;
     bufp->res_body_created = 1;
     bufp->res_fully_created = 1;
+
+}
+
+
+void dequeue_request(struct buf *bufp) {
+
+    // dequeue a request if previous response if fully sent
+    if (bufp->res_fully_sent == 1) {
+
+	// reset part of buf
+    	memset(bufp->path, 0, PATH_MAX);
+    	bufp->offset = 0;
+
+    	bufp->http_reply_p = req_dequeue(bufp->req_queue_p);
+
+    	bufp->res_line_header_created = 0;
+    	bufp->res_body_created = 0;
+	bufp->res_fully_created = 0;
+	bufp->res_fully_sent = 0; 
+
+    } else {
+
+	dbprintf("dequeue_request: fails, since fully_sent==0, current req is not fully sent yet\n");
+	dbprintf("dequeue_request: current req:%s %s %s\n", bufp->http_reply_p->method,bufp->http_reply_p->uri, bufp->http_reply_p->version);
+    }
+
+}
+
+
+
+/* return 0 on valid path, -1 on invalid path  */
+int check_path(struct buf *bufp) {
+
+    int len;
+    struct stat status;
+
+    if (stat(bufp->path, &status) == -1) {
+	perror("Error! check_path stat");		
+	return -1;
+    }
+
+    if (S_ISDIR(status.st_mode)) {
+	len = strlen(bufp->path);
+	if (bufp->path[len-1] == '/')
+	    bufp->path[len-1] = '\0';
+	strcat(bufp->path, "/index.html");
+    }
+
+    // check if path is valid file path
+    if (stat(bufp->path, &status) == -1) {
+	perror("Error! check_path stat");	
+	return -1;
+		
+    } else if (S_ISREG(status.st_mode)) {
+	dbprintf("check_path: locate file %s\n", bufp->path);
+    }
+    
+    return 0;
+}
+
+
+void enlist(char *arg_list[], char *arg) {
+    char **p;
+
+    p = arg_list;
+
+    while (*p != NULL)
+	p++;
+
+    //*p = arg;
+    *p = (char *)calloc(1, strlen(arg)+1);
+    strcpy(*p, arg);
+
+    *(p+1) = NULL;
+}
+
+char *delist(char *arg_list[]) {
+    char **p;
+
+    p = arg_list;
+    arg_list++;
+    
+    return *p;
+}
+
+void dbprintf_arglist(char **list) {
+    char *p;
+    int count;
+
+    count = 0;
+    while ((p = *(list++)) != NULL)
+	dbprintf("list[%d]:%s\n", count++, p);
 
 }

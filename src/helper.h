@@ -11,6 +11,7 @@
 #define BUF_SIZE 8192
 #define PATH_MAX 1024
 #define HEADER_LEN 1024
+#define ARG_MAX 1024
 
 extern const char CRLF[];
 extern const char CRLF2[];
@@ -33,6 +34,7 @@ extern const char MSG503[];
 extern const char MSG505[];
 
 extern const char server[];
+extern const char CGI[];
 
 extern const char TEXT_HTML[];
 extern const char TEXT_CSS[];
@@ -43,6 +45,11 @@ extern const char IMAGE_GIF[];
 extern const char ROOT[];
 
 extern const int CODE_UNSET;
+
+extern int cgi_fds[];
+#define is_cgifd(i) (cgi_fds[(i)])
+#define set_cgifd(i) (cgi_fds[(i)] = 1)
+#define clear_cgifd(i) (cgi_fds[(i)] = 0)
 
 struct http_req {
 
@@ -55,6 +62,10 @@ struct http_req {
     char cont_type[HEADER_LEN];
     char *contp;
     char connection[HEADER_LEN];
+
+    char *cgi_arg_list[ARG_MAX];
+    char *cgi_env_list[ARG_MAX];
+    int fds[2];
 
     struct http_req *next;
 
@@ -79,7 +90,6 @@ struct buf {
     int req_fully_received;
     int rbuf_req_count;
 
-    //    char rbuf[BUF_SIZE];
     char *rbuf;
     char *rbuf_head;
     char *rbuf_tail;
@@ -92,7 +102,6 @@ struct buf {
     // reply part
     struct http_req *http_reply_p;
 
-    //    char buf[BUF_SIZE];
     char *buf;
     char *buf_head;
     char *buf_tail;
@@ -111,11 +120,17 @@ struct buf {
     
     int allocated;
 
+    // ssl part
     SSL *client_context;
+
+    // cgi part
+    int port;
+    const char *cgiscript;
+    
 
 };
 
-void init_buf(struct buf *bufp);
+void init_buf(struct buf *bufp, const char *cgiscript);
 int init_ssl_contex(struct buf *bufp, SSL_CTX *ssl_contex, int sock);
 void reset_buf(struct buf *bufp);
 void reset_rbuf(struct buf *bufp);
@@ -127,12 +142,20 @@ void push_error(struct buf *bufp, const char *msg);
 
 void send_error(int sock, const char msg[]);
 
+struct http_req *req_peek(struct req_queue *q);
 void req_enqueue(struct req_queue *q, struct http_req *p);
 struct http_req *req_dequeue(struct req_queue *q);
+void dequeue_request(struct buf *bufp);
 void dbprint_queue(struct req_queue *q);
 
 int close_socket(int sock);
 int clear_buf(struct buf *bufp);
 void clear_buf_array(struct buf *buf_pts[], int maxfd);
+
+int check_path(struct buf *bufp);
+
+void enlist(char *arg_list[], char *arg);
+char *delist(char *arg_list[]);
+void dbprintf_arglist(char **list);
 
 #endif

@@ -10,12 +10,10 @@
 
 default: lisod echo_client
 
-lisod: lisod.c helper.c http_parser.c http_replyer.c helper.h 
-#	gcc lisod.c helper.c http_parser.c http_replyer.c -o lisod -Wall -Werror -lssl
-	gcc lisod.c helper.c http_parser.c http_replyer.c -o lisod -Wall -lssl
+lisod: lisod.c helper.c http_parser.c http_replyer.c helper.h cgi_parser.c
+	gcc lisod.c helper.c http_parser.c http_replyer.c cgi_parser.c -o lisod -Wall -lssl
 
 echo_client: echo_client.c helper.c http_replyer.c
-#	gcc echo_client.c helper.c http_replyer.c -lssl -o echo_client -Wall -Werror
 	gcc echo_client.c helper.c http_replyer.c -lssl -o echo_client -Wall 
 
 clean:
