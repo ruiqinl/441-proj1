@@ -15,11 +15,20 @@
 
 extern const char CRLF[];
 extern const char CRLF2[];
-extern const char host[];
-extern const char user_agent[];
-extern const char cont_len[];
+
 extern const char cont_type[];
+extern const char accept_range[];
+extern const char referer[];
+extern const char host[];
+extern const char encoding[];
+extern const char language[];
+extern const char charset[];
+extern const char cookie[];
+extern const char user_agent[];
 extern const char connection[];
+
+extern const char cont_len[];
+
 extern const char VERSION[];
 extern const char GET[];
 extern const char HEAD[];
@@ -43,26 +52,35 @@ extern const char IMAGE_JPEG[];
 extern const char IMAGE_GIF[];
 
 extern const char ROOT[];
+extern const char CGI_FOLDER[];
 
 extern const int CODE_UNSET;
 
-extern int cgi_fds[];
-#define is_cgifd(i) (cgi_fds[(i)])
-#define set_cgifd(i) (cgi_fds[(i)] = 1)
-#define clear_cgifd(i) (cgi_fds[(i)] = 0)
+extern struct buf *pipe_buf_array[];
+
 
 struct http_req {
 
-    char method[HEADER_LEN];
-    char uri[HEADER_LEN];
-    char version[HEADER_LEN];
-    char host[HEADER_LEN];
-    char user_agent[HEADER_LEN];
     int cont_len;
     char cont_type[HEADER_LEN];
-    char *contp;
+    //    char remote_addr[HEADER_LEN];  in buf
+    char method[HEADER_LEN];
+    char uri[HEADER_LEN];    
+    char http_accept[HEADER_LEN];
+    char http_referer[HEADER_LEN];
+    char http_accept_encoding[HEADER_LEN];
+    char http_accept_language[HEADER_LEN];
+    char http_accept_charset[HEADER_LEN];
+    char host[HEADER_LEN];
+    char cookie[HEADER_LEN];
+    char user_agent[HEADER_LEN];
     char connection[HEADER_LEN];
 
+    char version[HEADER_LEN];    
+
+    char *contp;
+
+    int use_cgi_folder;
     char *cgi_arg_list[ARG_MAX];
     char *cgi_env_list[ARG_MAX];
     int fds[2];
@@ -80,6 +98,10 @@ struct req_queue {
 };
 
 struct buf {
+
+    char remote_addr[HEADER_LEN]; 
+
+    int buf_sock;
 
     struct req_queue *req_queue_p;
 
@@ -126,11 +148,13 @@ struct buf {
     // cgi part
     int port;
     const char *cgiscript;
+    int cgi_fully_sent;
+    int cgi_fully_received;
     
 
 };
 
-void init_buf(struct buf *bufp, const char *cgiscript);
+void init_buf(struct buf *bufp, const char *cgiscript, int buf_sock);
 int init_ssl_contex(struct buf *bufp, SSL_CTX *ssl_contex, int sock);
 void reset_buf(struct buf *bufp);
 void reset_rbuf(struct buf *bufp);

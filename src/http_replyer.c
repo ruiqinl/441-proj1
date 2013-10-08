@@ -38,7 +38,9 @@ int create_response(struct buf *bufp) {
 
 /* return -1 on file not found, 0 on regular file found*/
 int locate_file(struct buf *bufp) {
-    
+    struct stat status;
+    char *p;
+
     dbprintf("locate_file: bufp->res_line_header_create==%d\n", bufp->res_line_header_created);
     // file not located yet
     if (bufp->res_line_header_created == 0) {
@@ -47,8 +49,27 @@ int locate_file(struct buf *bufp) {
 
 	dbprintf("locate_file: uri:%s\n", bufp->http_reply_p->uri);
 
-	strcpy(bufp->path, ROOT);
+	// not a file, attach 
+	p = strrchr(bufp->http_reply_p->uri, '/');
+	if (p == NULL)
+	    dbprintf("locate_file: uri contains no /\n");
+	if (strcmp(p, "/login") == 0) {
+	    // no need to memset
+	    strcpy(p, "/templates/login.html");
+        }
+	if (strcmp(p, "/layout") == 0) {
+	    strcpy(p, "/templates/layout.html");
+	}
+	if (strcmp(p, "/show_entries") == 0) {
+	    strcpy(p, "/templates/show_entries.html");
+	}
+	//..
+
+	if (stat(bufp->http_reply_p->uri, &status) == -1) 
+	    strcpy(bufp->path, ROOT);// ????? ROOR or CGI_FOLDER
 	strcat(bufp->path, bufp->http_reply_p->uri);
+
+	
 	dbprintf("locate_file: save path, bufp->path:%s\n", bufp->path);
 
 	// check if the path is invalid

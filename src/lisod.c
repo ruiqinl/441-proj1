@@ -26,7 +26,7 @@
 int main(int argc, char* argv[])
 {
     if (argc < 3) {
-	fprintf(stderr, "usage: ./lisod <HTTP port> <HTTPS port> <log file> <lock file> <www folder> <CGI folder or script name> <private key file> <certificate file>\n");
+	fprintf(stderr, "usage: ./lisod <HTTP port> <HTTPS port> <log file> <lock file> <www folder> <CGI folder or script name,i.e.cgi path> <private key file> <certificate file>\n");
 	return EXIT_FAILURE;
     }
 
@@ -49,11 +49,14 @@ int main(int argc, char* argv[])
     const char *lockfile = argv[4];
     const char *wwwfolder = argv[5];
     //const char *cgiscript = argv[6];
-    const char *cgiscript = "cgi_dumper.py";
+    const char *cgiscript = "../flaskr/wsgi_wrapper.py";
     const char *privatekey = argv[7];
     const char *certificatefile = argv[8];
 
-    memset(cgi_fds, 0, MAX_SOCK);
+    int j;
+    for (j = 0; j < MAX_SOCK; j++) {
+	pipe_buf_array[j] = NULL;
+    }
 
     fprintf(stdout, "----- Echo Server -----\n");
 
@@ -149,12 +152,13 @@ int main(int argc, char* argv[])
     FD_ZERO(&master_read_fds);
     FD_SET(sock, &master_read_fds);
     FD_SET(ssl_sock, &master_read_fds);
-    
+
+    dbprintf("sock:%d, ssl_sock:%d\n", sock, ssl_sock);
     if (sock > ssl_sock)
 	maxfd = sock;
     else 
 	maxfd = ssl_sock;
-
+    dbprintf("maxfd:%d\n", maxfd);
 
     /* run until coming across errors */
     while (1) {
@@ -201,7 +205,7 @@ int main(int argc, char* argv[])
 			    // general
 			    FD_SET(client_sock, &master_read_fds);
 			    buf_pts[client_sock] = (struct buf*) calloc(1, sizeof(struct buf));
-			    init_buf(buf_pts[client_sock], cgiscript); // initialize struct buf
+			    init_buf(buf_pts[client_sock], cgiscript, client_sock); // initialize struct buf
 
 			    // ssl
 			    if (i == ssl_sock) {
@@ -209,10 +213,10 @@ int main(int argc, char* argv[])
 				    close(client_sock);
 				    SSL_CTX_free(ssl_context);
 				    clear_buf(buf_pts[client_sock]);
-				    fprintf(stderr, "Error! init_ssl_contex\n");
+				    fprintf(stderr, "Error! Server, init_ssl_contex\n");
 				    // ????how to send msg back????
 				}
-			    }
+			    } 
 
 			    // cgi
 			    buf_pts[client_sock]->port = i; 
@@ -232,12 +236,31 @@ int main(int argc, char* argv[])
 		    /* conneciton socket is ready, read */
 		    /* it could also be a cgi pipe fd */
 
-		    if (is_cgifd(i)) {
+		    if (pipe_buf_array[i] != NULL && pipe_buf_array[i]->cgi_fully_received == 0) {
 			dbprintf("Server: recv data from cgi pipe %d\n", i);
 			
+			if ((recv_ret = recv_from_cgi(i, pipe_buf_array[i])) == -1) {
+			    dbprintf("Error! Server, recv_from_cgi return -1\n");
+			    FD_CLR(i, &master_read_fds);
+			    // ??? clear up????
+			} else if (recv_ret == 0) {
+			    dbprintf("Server: recv_from_cgi return 0, fully read, FD_CLR %d from &master_read_fds\n", i);
+			    //pipe_buf_array[i]->cgi_fully_received = 0; 
+			    pipe_buf_array[i] = NULL;// reset
+			    FD_CLR(i, &master_read_fds);
+			} else if (recv_ret > 0) {
+			    dbprintf("Server: recv_from_cgi recvs %d bytes, set buf_sock %d to master_write_fds\n", recv_ret, pipe_buf_array[i]->buf_sock);
+			    FD_SET(pipe_buf_array[i]->buf_sock, &master_write_fds);
+			    pipe_buf_array[i]->res_fully_created = 1;
+			    pipe_buf_array[i]->res_fully_sent = 0;
+			}
+			
+		    } else if (pipe_buf_array[i] != NULL && pipe_buf_array[i]->cgi_fully_received == 1) {
+			dbprintf("Server: this line should never be reached!!!! fix it\n");
+			FD_CLR(i, &master_read_fds);
 		    } else {
 
-			dbprintf("Server: recv request from client sock %d", i);
+			dbprintf("Server: recv request from client sock %d\n", i);
 
 			/* recv_ret -1: recv error; 0: recv 0; 1: recv some bytes */
 			recv_ret = recv_request(i, buf_pts[i]); 
@@ -257,19 +280,39 @@ int main(int argc, char* argv[])
 				req_p = req_peek(buf_pts[i]->req_queue_p);
 				if (strncmp(req_p->uri, CGI, strlen(CGI)) == 0) {
 				    dbprintf("Server: cgi request\n");
+				    //req_p->is_cgi_req = 1; // don't really need this line
+
 				    dequeue_request(buf_pts[i]); // cgi request dequeues here, static request later
+
+				    // not really necessary, remove locate_cgi later??????????
 				    if (locate_cgi(buf_pts[i]) == -1) {
 					fprintf(stderr, "Error! Server, locate_cgi\n");
 					// ???? send error msg to client????
 				    }
-				    parse_cgi_uri(buf_pts[i]);
-				    if (init_cgi(buf_pts[i]) == -1 
-					|| run_cgi(buf_pts[i], &master_write_fds, &master_read_fds) == -1 ) {
 
+				    parse_cgi_uri(buf_pts[i]);
+				    dbprintf("bufp->http_req_p->cgi_arg_list:\n");
+				    dbprintf_arglist(buf_pts[i]->http_req_p->cgi_arg_list);
+				    dbprintf("bufp->http_req_p->cgi_env_list:\n");
+				    dbprintf_arglist(buf_pts[i]->http_req_p->cgi_env_list);
+
+				    if (run_cgi(buf_pts[i]) == -1 ) {
 					dbprintf("Error! Server, init_cgi/run_cgi\n");
 					cgi_FD_CLR(buf_pts[i], &master_read_fds, &master_write_fds);
 					clear_buf(buf_pts[i]);
 					close_socket(i);
+				    } else {
+				    	dbprintf("Server: parent process, set %d/%d to master_write/read_fds\n", buf_pts[i]->http_reply_p->fds[1], buf_pts[i]->http_reply_p->fds[0]);
+					if (buf_pts[i]->http_reply_p->cont_len != 0)
+					    FD_SET(buf_pts[i]->http_reply_p->fds[1], &master_write_fds);  
+				        FD_SET(buf_pts[i]->http_reply_p->fds[0], &master_read_fds);
+
+					//keep track of max fd
+					if (maxfd < buf_pts[i]->http_reply_p->fds[1])
+					    maxfd = buf_pts[i]->http_reply_p->fds[1];
+					if (maxfd < buf_pts[i]->http_reply_p->fds[0])
+					    maxfd = buf_pts[i]->http_reply_p->fds[0];
+
 				    }
 
 				} else {
@@ -305,9 +348,25 @@ int main(int argc, char* argv[])
 	    /* check fd in write_fds  */
 	    if (FD_ISSET(i, &write_fds)) {
 
-		if (is_cgifd(i)) {
-		    dbprintf("Server: write to pipe %d\n", i);
-		    FD_CLR(i, &master_write_fds);
+		//dbprintf("pipe_buf_array[i]:%p\n", pipe_buf_array[i]);
+		//dbprintf("pipe_buf_array[i]->cgi_fully_sent:%d\n", pipe_buf_array[i]->cgi_fully_sent);
+		if (pipe_buf_array[i] != NULL && pipe_buf_array[i]->cgi_fully_sent == 0) {
+		    dbprintf("Server: send data to cgi pipe %d\n", i);
+		    
+		    if (send_to_cgi(i, pipe_buf_array[i]) == -1) {
+			FD_CLR(i, &master_write_fds);
+		    }
+
+		    if (pipe_buf_array[i]->cgi_fully_sent == 1) {
+			dbprintf("Server: send_to_cgi fully sent, FD_CLR %d from &master_write_fds\n", i);
+			close(i);
+			FD_CLR(i, &master_write_fds);
+			pipe_buf_array[i] = NULL; //reset
+		    }
+
+		} else if (pipe_buf_array[i] != NULL && pipe_buf_array[i]->cgi_fully_sent == 1) {
+		    dbprintf("Server: buf is not empty(recv_from_cgi), send response\n");
+		    send_response(i, buf_pts[i]);
 
 		} else {
 		    dbprintf("\nServer: create/continue creating response for sock %d\n", i);

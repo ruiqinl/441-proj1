@@ -224,6 +224,73 @@ int parse_request_headers(struct buf *bufp) {
 
     http_req_p = bufp->http_req_p;
 
+    if ((p1 = strstr(bufp->line_head, cont_type)) != NULL && p1 < bufp->line_tail) {
+
+	p1 += strlen(cont_type);
+	while (isspace(*p1))
+	    ++p1;
+
+	p2 = strstr(p1, CRLF);
+	while (isspace(*(p2-1)))
+	    --p2;
+
+	len = p2 - p1;
+	
+	if (len >= HEADER_LEN - 1){
+	    len = HEADER_LEN - 1;
+	    fprintf(stderr, "Warning! parse_request, cont_type buffer overflow\n");
+	}
+	strncpy(http_req_p->cont_type, p1, len);
+	http_req_p->cont_type[len] = '\0';
+    } else 
+	strcat(http_req_p->cont_type, "");
+    dbprintf("http_req->cont_type:%s\n", http_req_p->cont_type);
+
+    if ((p1 = strstr(bufp->line_head, accept)) != NULL && p1 < bufp->line_tail) {
+
+	p1 += strlen(accept);
+	while (isspace(*p1))
+	    ++p1;
+
+	p2 = strstr(p1, CRLF);
+	while (isspace(*(p2-1)))
+	    --p2;
+
+	len = p2 - p1;
+	
+	if (len >= HEADER_LEN - 1){
+	    len = HEADER_LEN - 1;
+	    fprintf(stderr, "Warning! parse_request, accept buffer overflow\n");
+	}
+	strncpy(http_req_p->http_accept, p1, len);
+	http_req_p->http_accept[len] = '\0';
+    } else 
+	strcat(http_req_p->http_accept, "");
+    dbprintf("http_req->http_accept:%s\n", http_req_p->http_accept);
+
+     if ((p1 = strstr(bufp->line_head, referer)) != NULL && p1 < bufp->line_tail) {
+
+	p1 += strlen(referer);
+	while (isspace(*p1))
+	    ++p1;
+
+	p2 = strstr(p1, CRLF);
+	while (isspace(*(p2-1)))
+	    --p2;
+
+	len = p2 - p1;
+	
+	if (len >= HEADER_LEN - 1){
+	    len = HEADER_LEN - 1;
+	    fprintf(stderr, "Warning! parse_request, referer buffer overflow\n");
+	}
+	strncpy(http_req_p->http_referer, p1, len);
+	http_req_p->http_referer[len] = '\0';
+    } else 
+	strcat(http_req_p->http_referer, "");
+    dbprintf("http_req->http_referer:%s\n", http_req_p->http_referer);
+
+
     if ((p1 = strstr(bufp->line_head, host)) != NULL && p1 < bufp->line_tail) {
 
 	p1 += strlen(host);
@@ -245,6 +312,94 @@ int parse_request_headers(struct buf *bufp) {
     } else 
 	strcat(http_req_p->host, "");
     dbprintf("http_req->host:%s\n", http_req_p->host);
+
+    if ((p1 = strstr(bufp->line_head, encoding)) != NULL && p1 < bufp->line_tail) {
+
+	p1 += strlen(encoding);
+	while (isspace(*p1))
+	    ++p1;
+
+	p2 = strstr(p1, CRLF);
+	while (isspace(*(p2-1)))
+	    --p2;
+
+	len = p2 - p1;
+	if (len > HEADER_LEN - 1) {
+	    len = HEADER_LEN - 1;
+	    fprintf(stderr, "Warning! parse_request, host buffer overflow\n");
+	}
+	strncpy(http_req_p->http_accept_encoding, p1, len);
+	http_req_p->http_accept_encoding[len] = '\0';
+	
+    } else 
+	strcat(http_req_p->http_accept_encoding, "");
+    dbprintf("http_req->http_accept_encoding:%s\n", http_req_p->http_accept_encoding);
+
+    if ((p1 = strstr(bufp->line_head, language)) != NULL && p1 < bufp->line_tail) {
+
+	p1 += strlen(language);
+	while (isspace(*p1))
+	    ++p1;
+
+	p2 = strstr(p1, CRLF);
+	while (isspace(*(p2-1)))
+	    --p2;
+
+	len = p2 - p1;
+	if (len > HEADER_LEN - 1) {
+	    len = HEADER_LEN - 1;
+	    fprintf(stderr, "Warning! parse_request, host buffer overflow\n");
+	}
+	strncpy(http_req_p->http_accept_language, p1, len);
+	http_req_p->http_accept_language[len] = '\0';
+	
+    } else 
+	strcat(http_req_p->http_accept_language, "");
+    dbprintf("http_req->http_accept_language:%s\n", http_req_p->http_accept_language);
+
+    if ((p1 = strstr(bufp->line_head, charset)) != NULL && p1 < bufp->line_tail) {
+
+	p1 += strlen(charset);
+	while (isspace(*p1))
+	    ++p1;
+
+	p2 = strstr(p1, CRLF);
+	while (isspace(*(p2-1)))
+	    --p2;
+
+	len = p2 - p1;
+	if (len > HEADER_LEN - 1) {
+	    len = HEADER_LEN - 1;
+	    fprintf(stderr, "Warning! parse_request, host buffer overflow\n");
+	}
+	strncpy(http_req_p->http_accept_charset, p1, len);
+	http_req_p->http_accept_charset[len] = '\0';
+	
+    } else 
+	strcat(http_req_p->http_accept_charset, "");
+    dbprintf("http_req->http_accept_charset:%s\n", http_req_p->http_accept_charset);
+
+    if ((p1 = strstr(bufp->line_head, cookie)) != NULL && p1 < bufp->line_tail) {
+
+	p1 += strlen(cookie);
+	while (isspace(*p1))
+	    ++p1;
+
+	p2 = strstr(p1, CRLF);
+	while (isspace(*(p2-1)))
+	    --p2;
+
+	len = p2 - p1;
+	
+	if (len >= HEADER_LEN - 1){
+	    len = HEADER_LEN - 1;
+	    fprintf(stderr, "Warning! parse_request, cookie buffer overflow\n");
+	}
+	strncpy(http_req_p->cookie, p1, len);
+	http_req_p->cookie[len] = '\0';
+    } else 
+	strcat(http_req_p->cookie, "");
+    dbprintf("http_req->cookie:%s\n", http_req_p->cookie);
 
     if ((p1 = strstr(bufp->line_head, user_agent)) != NULL && p1 < bufp->line_tail) {
 
@@ -268,56 +423,6 @@ int parse_request_headers(struct buf *bufp) {
 	strcat(http_req_p->user_agent, "");
     dbprintf("http_req->user_agent:%s\n", http_req_p->user_agent);
 
-
-    if ((p1 = strstr(bufp->line_head, cont_len)) != NULL && p1 < bufp->line_tail) {
-
-	p1 += strlen(cont_len);
-	while (isspace(*p1))
-	    ++p1;
-
-	p2 = strstr(p1, CRLF);
-	while (isspace(*(p2-1)))
-	    --p2;
-
-	len = p2 - p1;
-
-	len = bufp->line_tail - p1;
-	if (len > tmp_size-1) {
-	    len = tmp_size- 1;
-	    fprintf(stderr, "Warning! parse_request, cont_len buffer overflow\n");
-	}
-	strncpy(tmp, p1, len);
-	tmp[len] = '\0';
-	http_req_p->cont_len = atoi(tmp);
-	
-
-    }
-    dbprintf("http_req->cont_len:%d\n", http_req_p->cont_len);
-
-
-    if ((p1 = strstr(bufp->line_head, cont_type)) != NULL && p1 < bufp->line_tail) {
-
-	p1 += strlen(cont_type);
-	while (isspace(*p1))
-	    ++p1;
-
-	p2 = strstr(p1, CRLF);
-	while (isspace(*(p2-1)))
-	    --p2;
-
-	len = p2 - p1;
-	
-	if (len >= HEADER_LEN - 1){
-	    len = HEADER_LEN - 1;
-	    fprintf(stderr, "Warning! parse_request, cont_type buffer overflow\n");
-	}
-	strncpy(http_req_p->cont_type, p1, len);
-	http_req_p->cont_type[len] = '\0';
-    } else 
-	strcat(http_req_p->cont_type, "");
-    dbprintf("http_req->cont_type:%s\n", http_req_p->cont_type);
-
-
     if ((p1 = strstr(bufp->line_head, connection)) != NULL && p1 < bufp->line_tail) {
 
 	p1 += strlen(connection);
@@ -339,6 +444,35 @@ int parse_request_headers(struct buf *bufp) {
     } else 
 	strcat(http_req_p->connection, "");
     dbprintf("http_req->connection:%s\n", http_req_p->connection);
+
+
+    if ((p1 = strstr(bufp->line_head, cont_len)) != NULL && p1 < bufp->line_tail) {
+
+	p1 += strlen(cont_len);
+	while (isspace(*p1))
+	    ++p1;
+
+	p2 = strstr(p1, CRLF);
+	while (isspace(*(p2-1)))
+	    --p2;
+
+	len = p2 - p1;
+
+
+	//len = bufp->line_tail - p1;
+	if (len > tmp_size-1) {
+	    len = tmp_size- 1;
+	    fprintf(stderr, "Warning! parse_request, cont_len buffer overflow\n");
+	}
+	strncpy(tmp, p1, len);
+	tmp[len] = '\0';
+	http_req_p->cont_len = atoi(tmp);
+	
+
+    }
+    dbprintf("http_req->cont_len:%d\n", http_req_p->cont_len);
+
+    
 
     return 0;
 }
@@ -366,8 +500,11 @@ int parse_message_body(struct buf *bufp) {
 	dbprintf("Remember to send error msg back to client\n");
     }
     p += strlen(CRLF2);
+    
+    bufp->http_req_p->contp = (char *)calloc(bufp->http_req_p->cont_len+1, sizeof(char));
+    strcpy(bufp->http_req_p->contp, p);
 
-    dbprintf("parse_message_body: body part:%s\n", p);
+    dbprintf("parse_message_body: body part:%s\n", bufp->http_req_p->contp);
 
     non_body_size = p - bufp->rbuf;
     body_size = bufp->rbuf_size - non_body_size;

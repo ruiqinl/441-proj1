@@ -14,11 +14,20 @@
 
 const char CRLF[] = "\r\n";
 const char CRLF2[] = "\r\n\r\n";
-const char host[] = "Host:";
-const char user_agent[] = "User-Agent:";
-const char cont_len[] = "Content-Length:";
+
 const char cont_type[] = "Content-Type:";
+const char accept_range[] = "Accept-Ranges:";
+const char referer[] = "Referer:";//????
+const char host[] = "Host:";
+const char encoding[] = "Content-Encoding:";
+const char language[] = "Content-Langage:";
+const char charset[] = "Accept-Charset:";
+const char cookie[] = "Cookie:";
+const char user_agent[] = "User-Agent:";
 const char connection[] = "Connection:";
+
+const char cont_len[] = "Content-Length:";
+
 const char GET[] = "GET";
 const char HEAD[] = "HEAD";
 const char POST[] = "POST";
@@ -39,12 +48,15 @@ const char IMAGE_JPEG[] = "image/jpeg";
 const char IMAGE_GIF[] = "image/gif";
 
 const char server[] = "Server: Liso/1.0\r\n";
-const char CGI[] = "/cgi/";
+const char CGI[] = "/cgi";
 
+// these two are actually www and cgi from command line args ????????????
 const char ROOT[] = "../static_site";
-const int CODE_UNSET = -2;// -2 is not used by parse_request
+const char CGI_FOLDER[] = "/Users/liruiqins/Desktop/15441_Computer_Networks/project1_cp1_starter/flaskr";
+//const int CODE_UNSET = -2;// -2 is not used by parse_request
 
-int cgi_fds[MAX_SOCK];
+struct buf *pipe_buf_array[MAX_SOCK];
+
 
 void init_req_queue(struct req_queue *p) {
     p->req_head = NULL;
@@ -52,7 +64,9 @@ void init_req_queue(struct req_queue *p) {
     p->req_count = 0;
 }
 
-void init_buf(struct buf* bufp, const char *cgiscript){
+void init_buf(struct buf* bufp, const char *cgiscript, int buf_sock){
+
+    bufp->buf_sock = buf_sock;
 
     bufp->req_queue_p = (struct req_queue *)calloc(1, sizeof(struct req_queue));
     
@@ -100,6 +114,8 @@ void init_buf(struct buf* bufp, const char *cgiscript){
     // cgi part
     bufp->port = 0;
     bufp->cgiscript = cgiscript;
+    bufp->cgi_fully_sent = 0;
+    bufp->cgi_fully_received = 0;
 
 }
 
@@ -386,6 +402,9 @@ void dequeue_request(struct buf *bufp) {
     	bufp->res_body_created = 0;
 	bufp->res_fully_created = 0;
 	bufp->res_fully_sent = 0; 
+
+	bufp->cgi_fully_sent = 0;
+	bufp->cgi_fully_received = 0;
 
     } else {
 
