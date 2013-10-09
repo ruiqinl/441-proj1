@@ -13,7 +13,8 @@ int create_response(struct buf *bufp) {
     
     int locate_ret;
 
-    dequeue_request(bufp);
+    if (bufp->is_cgi_req == 0)
+	dequeue_request(bufp);
     
     if (bufp->res_fully_created == 1)
 	return bufp->buf_size; // no more reply to created, just send what left in buf
@@ -38,8 +39,6 @@ int create_response(struct buf *bufp) {
 
 /* return -1 on file not found, 0 on regular file found*/
 int locate_file(struct buf *bufp) {
-    struct stat status;
-    char *p;
 
     dbprintf("locate_file: bufp->res_line_header_create==%d\n", bufp->res_line_header_created);
     // file not located yet
@@ -50,23 +49,23 @@ int locate_file(struct buf *bufp) {
 	dbprintf("locate_file: uri:%s\n", bufp->http_reply_p->uri);
 
 	// not a file, attach 
-	p = strrchr(bufp->http_reply_p->uri, '/');
-	if (p == NULL)
-	    dbprintf("locate_file: uri contains no /\n");
-	if (strcmp(p, "/login") == 0) {
+	//	p = strrchr(bufp->http_reply_p->uri, '/');
+	//	if (p == NULL)
+	//	    dbprintf("locate_file: uri contains no /\n");
+	//	if (strcmp(p, "/login") == 0) {
 	    // no need to memset
-	    strcpy(p, "/templates/login.html");
-        }
-	if (strcmp(p, "/layout") == 0) {
-	    strcpy(p, "/templates/layout.html");
-	}
-	if (strcmp(p, "/show_entries") == 0) {
-	    strcpy(p, "/templates/show_entries.html");
-	}
+	//	    strcpy(p, "/templates/login.html");
+	//        }
+	//	if (strcmp(p, "/layout") == 0) {
+	//	    strcpy(p, "/templates/layout.html");
+	//	}
+	//	if (strcmp(p, "/show_entries") == 0) {
+	//	    strcpy(p, "/templates/show_entries.html");
+	//	}
 	//..
 
-	if (stat(bufp->http_reply_p->uri, &status) == -1) 
-	    strcpy(bufp->path, ROOT);// ????? ROOR or CGI_FOLDER
+
+	strcpy(bufp->path, bufp->www);
 	strcat(bufp->path, bufp->http_reply_p->uri);
 
 	
@@ -214,6 +213,7 @@ int send_response(int sock, struct buf *bufp) {
 	return -1;
     }
 
+
     bufp->buf_head += sendret;
     bufp->buf_size -= sendret;
     //    bufp->buf_free_size += sendret; ???????? what !!!!!!!!
@@ -225,6 +225,7 @@ int send_response(int sock, struct buf *bufp) {
 	reset_buf(bufp);
 	dbprintf("send_response: whole buf is sent, reset it\n");
     }
+
 
     return sendret;
 }

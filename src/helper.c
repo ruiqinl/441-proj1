@@ -7,6 +7,9 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <openssl/ssl.h>
+#include <netinet/in.h>
+#include <netinet/ip.h>
+#include <arpa/inet.h>
 
 #include "helper.h"
 #include "http_replyer.h"
@@ -16,11 +19,11 @@ const char CRLF[] = "\r\n";
 const char CRLF2[] = "\r\n\r\n";
 
 const char cont_type[] = "Content-Type:";
-const char accept_range[] = "Accept-Ranges:";
+const char accept_range[] = "Accept:";
 const char referer[] = "Referer:";//????
 const char host[] = "Host:";
-const char encoding[] = "Content-Encoding:";
-const char language[] = "Content-Langage:";
+const char encoding[] = "Accept-Encoding:";
+const char language[] = "Accept-Language:";
 const char charset[] = "Accept-Charset:";
 const char cookie[] = "Cookie:";
 const char user_agent[] = "User-Agent:";
@@ -51,8 +54,8 @@ const char server[] = "Server: Liso/1.0\r\n";
 const char CGI[] = "/cgi";
 
 // these two are actually www and cgi from command line args ????????????
-const char ROOT[] = "../static_site";
-const char CGI_FOLDER[] = "/Users/liruiqins/Desktop/15441_Computer_Networks/project1_cp1_starter/flaskr";
+//const char ROOT[] = "../static_site"; static_site->www
+//const char CGI_FOLDER[] = "/Users/liruiqins/Desktop/15441_Computer_Networks/project1_cp1_starter/flaskr";
 //const int CODE_UNSET = -2;// -2 is not used by parse_request
 
 struct buf *pipe_buf_array[MAX_SOCK];
@@ -64,7 +67,14 @@ void init_req_queue(struct req_queue *p) {
     p->req_count = 0;
 }
 
-void init_buf(struct buf* bufp, const char *cgiscript, int buf_sock){
+void init_buf(struct buf* bufp, const char *cgiscript, int buf_sock, const char *www, struct sockaddr_in *cli_addr, int port){
+
+    char clientIP[INET6_ADDRSTRLEN];
+    char *p = inet_ntop(AF_INET, &(cli_addr->sin_addr), clientIP, INET6_ADDRSTRLEN);
+    bufp->remote_addr = (char *)calloc(1, strlen(p)+1);
+    strcpy(bufp->remote_addr, p);
+
+    bufp->server_port = port;
 
     bufp->buf_sock = buf_sock;
 
@@ -103,6 +113,7 @@ void init_buf(struct buf* bufp, const char *cgiscript, int buf_sock){
     bufp->res_fully_created = 0; 
     bufp->res_fully_sent = 1; // see create_response for reason
  
+    bufp->www = www;
     bufp->path = (char *)calloc(PATH_MAX, sizeof(char)); // file path
     bufp->offset = 0; // file offest 
 
@@ -112,7 +123,6 @@ void init_buf(struct buf* bufp, const char *cgiscript, int buf_sock){
     bufp->client_context = NULL;
 
     // cgi part
-    bufp->port = 0;
     bufp->cgiscript = cgiscript;
     bufp->cgi_fully_sent = 0;
     bufp->cgi_fully_received = 0;
@@ -250,6 +260,7 @@ void reset_rbuf(struct buf *bufp) {
     
 	bufp->rbuf_size = 0;
 	bufp->rbuf_free_size = BUF_SIZE;
+
     } else 
 	fprintf(stderr, "Warnning: reset_rbuf, buf is not allocated yet\n");
     

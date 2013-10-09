@@ -26,7 +26,7 @@
 int main(int argc, char* argv[])
 {
     if (argc < 3) {
-	fprintf(stderr, "usage: ./lisod <HTTP port> <HTTPS port> <log file> <lock file> <www folder> <CGI folder or script name,i.e.cgi path> <private key file> <certificate file>\n");
+	fprintf(stderr, "usage: ./lisod <HTTP port> <HTTPS port> <log file> <lock file> <www folder> <CGI folder or script name> <private key file> <certificate file>\n");
 	return EXIT_FAILURE;
     }
 
@@ -47,11 +47,11 @@ int main(int argc, char* argv[])
     const int ssl_port = atoi(argv[2]);
     const char *logfile = argv[3];
     const char *lockfile = argv[4];
-    const char *wwwfolder = argv[5];
-    //const char *cgiscript = argv[6];
-    const char *cgiscript = "../flaskr/wsgi_wrapper.py";
+    const char *www = argv[5];
+    const char *cgiscript = argv[6];
+    //const char *cgiscript = "../flaskr/wsgi_wrapper.py";
     const char *privatekey = argv[7];
-    const char *certificatefile = argv[8];
+    const char *cert = argv[8];
 
     int j;
     for (j = 0; j < MAX_SOCK; j++) {
@@ -101,14 +101,17 @@ int main(int argc, char* argv[])
     }
 
     // register private key
-    if (SSL_CTX_use_PrivateKey_file(ssl_context, "../private/ruiqinl.key", SSL_FILETYPE_PEM) == 0) {
+    //if (SSL_CTX_use_PrivateKey_file(ssl_context, "../private/ruiqinl.key", SSL_FILETYPE_PEM) == 0) {
+    dbprintf("private key:%s\n", privatekey);
+    if (SSL_CTX_use_PrivateKey_file(ssl_context, privatekey, SSL_FILETYPE_PEM) == 0) {
 	SSL_CTX_free(ssl_context);
 	fprintf(stderr, "Error associating private key.\n");
 	return EXIT_FAILURE;
     }
 
     // register public key
-    if (SSL_CTX_use_certificate_file(ssl_context, "../certs/ruiqinl.crt", SSL_FILETYPE_PEM) == 0) {
+    //if (SSL_CTX_use_certificate_file(ssl_context, "../certs/ruiqinl.crt", SSL_FILETYPE_PEM) == 0) {
+    if (SSL_CTX_use_certificate_file(ssl_context, cert, SSL_FILETYPE_PEM) == 0) {
 	SSL_CTX_free(ssl_context);
 	fprintf(stderr, "Error associating certificate.\n");
 	return EXIT_FAILURE;
@@ -158,7 +161,6 @@ int main(int argc, char* argv[])
 	maxfd = sock;
     else 
 	maxfd = ssl_sock;
-    dbprintf("maxfd:%d\n", maxfd);
 
     /* run until coming across errors */
     while (1) {
@@ -205,10 +207,13 @@ int main(int argc, char* argv[])
 			    // general
 			    FD_SET(client_sock, &master_read_fds);
 			    buf_pts[client_sock] = (struct buf*) calloc(1, sizeof(struct buf));
-			    init_buf(buf_pts[client_sock], cgiscript, client_sock); // initialize struct buf
+			    init_buf(buf_pts[client_sock], cgiscript, client_sock, www, &cli_addr, i); // initialize struct buf
+			    strcpy(buf_pts[client_sock]->https, "0");
 
 			    // ssl
 			    if (i == ssl_sock) {
+				strcpy(buf_pts[client_sock]->https, "1");
+
 				if (init_ssl_contex(buf_pts[client_sock],ssl_context, client_sock) == -1) {
 				    close(client_sock);
 				    SSL_CTX_free(ssl_context);
@@ -219,7 +224,7 @@ int main(int argc, char* argv[])
 			    } 
 
 			    // cgi
-			    buf_pts[client_sock]->port = i; 
+			    buf_pts[client_sock]->server_port = i; 
 
 			    dbprintf("buf_pts[%d] allocated, rbuf_free_size:%d\n", client_sock, buf_pts[client_sock]->rbuf_free_size);
 			    /* track maxfd */
@@ -245,7 +250,7 @@ int main(int argc, char* argv[])
 			    // ??? clear up????
 			} else if (recv_ret == 0) {
 			    dbprintf("Server: recv_from_cgi return 0, fully read, FD_CLR %d from &master_read_fds\n", i);
-			    //pipe_buf_array[i]->cgi_fully_received = 0; 
+			    pipe_buf_array[i]->cgi_fully_received = 0; 
 			    pipe_buf_array[i] = NULL;// reset
 			    FD_CLR(i, &master_read_fds);
 			} else if (recv_ret > 0) {
@@ -280,7 +285,7 @@ int main(int argc, char* argv[])
 				req_p = req_peek(buf_pts[i]->req_queue_p);
 				if (strncmp(req_p->uri, CGI, strlen(CGI)) == 0) {
 				    dbprintf("Server: cgi request\n");
-				    //req_p->is_cgi_req = 1; // don't really need this line
+				    buf_pts[i]->is_cgi_req = 1; // don't really need this line
 
 				    dequeue_request(buf_pts[i]); // cgi request dequeues here, static request later
 
@@ -318,6 +323,7 @@ int main(int argc, char* argv[])
 				} else {
 				    dbprintf("Server: static request\n");
 				    FD_SET(i, &master_write_fds);
+				    buf_pts[i]->is_cgi_req = 0;
 				    dbprintf("Server: set %d into master_write_fds\n", i);
 				}
 			    

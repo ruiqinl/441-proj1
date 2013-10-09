@@ -246,9 +246,9 @@ int parse_request_headers(struct buf *bufp) {
 	strcat(http_req_p->cont_type, "");
     dbprintf("http_req->cont_type:%s\n", http_req_p->cont_type);
 
-    if ((p1 = strstr(bufp->line_head, accept)) != NULL && p1 < bufp->line_tail) {
+    if ((p1 = strstr(bufp->line_head, accept_range)) != NULL && p1 < bufp->line_tail) {
 
-	p1 += strlen(accept);
+	p1 += strlen(accept_range);
 	while (isspace(*p1))
 	    ++p1;
 

@@ -3,6 +3,10 @@
 
 #include <stdio.h>
 #include <openssl/ssl.h>
+#include <netinet/in.h>
+#include <netinet/ip.h>
+#include <arpa/inet.h>
+
 
 #define DEBUG 1
 #define dbprintf(...) do{if(DEBUG) fprintf(stderr, __VA_ARGS__); }while(0)
@@ -75,6 +79,7 @@ struct http_req {
     char cookie[HEADER_LEN];
     char user_agent[HEADER_LEN];
     char connection[HEADER_LEN];
+    char https[HEADER_LEN];
 
     char version[HEADER_LEN];    
 
@@ -99,7 +104,11 @@ struct req_queue {
 
 struct buf {
 
-    char remote_addr[HEADER_LEN]; 
+    int is_cgi_req;
+
+    char https[2];
+
+    char *remote_addr; 
 
     int buf_sock;
 
@@ -135,6 +144,8 @@ struct buf {
     int res_fully_created;
     int res_fully_sent;
 
+    const char *cgiscript;
+    const char *www; // save www path
     char *path; // GET/HEAD file path
     //    char path[PATH_MAX];
     long offset; // keep track of read offset
@@ -146,15 +157,15 @@ struct buf {
     SSL *client_context;
 
     // cgi part
-    int port;
-    const char *cgiscript;
+    int server_port;
+
     int cgi_fully_sent;
     int cgi_fully_received;
     
 
 };
 
-void init_buf(struct buf *bufp, const char *cgiscript, int buf_sock);
+void init_buf(struct buf *bufp, const char *cgiscript, int buf_sock, const char *www, struct sockaddr_in *cli_addr, int server_port);
 int init_ssl_contex(struct buf *bufp, SSL_CTX *ssl_contex, int sock);
 void reset_buf(struct buf *bufp);
 void reset_rbuf(struct buf *bufp);

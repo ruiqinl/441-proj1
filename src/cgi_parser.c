@@ -25,6 +25,7 @@ const char HTTP_HOST[] = "HTTP_HOST=";
 const char HTTP_COOKIE[] = "HTTP_COOKIE=";
 const char HTTP_USER_AGENT[] = "HTTP_USER_AGENT=";
 const char HTTP_CONNECTION[] = "HTTP_CONNECTION=";
+const char HTTPS[] = "HTTPS=";
 
 
 const char SERVER_NAME[] = "SERVER_NAME=ruiqinl.no-ip.biz";
@@ -135,8 +136,7 @@ int parse_cgi_uri(struct buf *bufp) {
 
     req_p = bufp->http_reply_p;
 
-    // ??????
-    enlist(req_p->cgi_arg_list, CGI_FOLDER); 
+    enlist(req_p->cgi_arg_list, bufp->cgiscript); // ????
     
     // env_list: path, query string
     if((p1 = strstr(req_p->uri, CGI)) == NULL) {
@@ -148,10 +148,16 @@ int parse_cgi_uri(struct buf *bufp) {
     if ((p2 = strchr(p1, '?')) == NULL) {
 	dbprintf("parse_cgi_uri: ? not found, query string is empty\n");
 
-	// path
+	// path_info
 	memset(buf, 0, BUF_SIZE);
 	strcpy(buf, PATH_INFO);
 	strcat(buf, p1);
+	enlist(req_p->cgi_env_list, buf);
+
+	//req_uri
+	memset(buf, 0, BUF_SIZE);
+	strcpy(buf, REQUEST_URI);
+	strcat(buf, req_p->uri);
 	enlist(req_p->cgi_env_list, buf);
 
 	// query string, empty
@@ -161,7 +167,7 @@ int parse_cgi_uri(struct buf *bufp) {
     } else {
 	dbprintf("parse_cgi_uri: ? found, query string is not empty\n");
 	
-	//path
+	//path_info
 	memset(buf, 0, BUF_SIZE);
 	strcpy(buf, PATH_INFO);
 	strncat(buf, p1, p2-p1);
@@ -170,8 +176,7 @@ int parse_cgi_uri(struct buf *bufp) {
 	// request_uri
 	memset(buf, 0, BUF_SIZE);
 	strcpy(buf, REQUEST_URI);
-	strcat(buf, CGI);
-	strncat(buf, p1, p2-p1);
+	strncat(buf, req_p->uri, p2 - req_p->uri);
 	enlist(req_p->cgi_env_list, buf);
 
 	// query string
@@ -180,8 +185,6 @@ int parse_cgi_uri(struct buf *bufp) {
 	strcat(buf, p2+1);
 	enlist(req_p->cgi_env_list, buf);
 
-
-	
     }
 
     //env_list: content length
@@ -206,7 +209,7 @@ int parse_cgi_uri(struct buf *bufp) {
     // remote_addr
     memset(buf, 0, BUF_SIZE);
     strcpy(buf, REMOTE_ADDR);
-    strcat(buf, bufp->remote_addr);// ????
+    strcat(buf, bufp->remote_addr);
     enlist(req_p->cgi_env_list, buf);
 
     //env_list: method
@@ -226,8 +229,8 @@ int parse_cgi_uri(struct buf *bufp) {
     //env_list: server_port
     memset(buf, 0, BUF_SIZE);
     strcpy(buf, SERVER_PORT);
-    //sprintf(buf+strlen(SERVER_PORT), "%d", bufp->port); // add to buf later
-    sprintf(buf+strlen(SERVER_PORT), "%d", 9999); // add to buf later
+    sprintf(buf+strlen(SERVER_PORT), "%d", bufp->server_port);// ?????
+    //sprintf(buf+strlen(SERVER_PORT), "%d", 9999); // add to buf later
     enlist(req_p->cgi_env_list, buf);
 
     //env_list: server_protocol
@@ -283,6 +286,11 @@ int parse_cgi_uri(struct buf *bufp) {
     memset(buf, 0, BUF_SIZE);
     strcpy(buf, HTTP_CONNECTION);
     strcat(buf, req_p->connection);
+    enlist(req_p->cgi_env_list, buf);            
+
+    memset(buf, 0, BUF_SIZE);
+    strcpy(buf, HTTPS);
+    strcat(buf, bufp->https);
     enlist(req_p->cgi_env_list, buf);            
 
 
