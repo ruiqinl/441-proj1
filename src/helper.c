@@ -70,7 +70,7 @@ void init_req_queue(struct req_queue *p) {
 void init_buf(struct buf* bufp, const char *cgiscript, int buf_sock, const char *www, struct sockaddr_in *cli_addr, int port){
 
     char clientIP[INET6_ADDRSTRLEN];
-    char *p = inet_ntop(AF_INET, &(cli_addr->sin_addr), clientIP, INET6_ADDRSTRLEN);
+    const char *p = inet_ntop(AF_INET, &(cli_addr->sin_addr), clientIP, INET6_ADDRSTRLEN);
     bufp->remote_addr = (char *)calloc(1, strlen(p)+1);
     strcpy(bufp->remote_addr, p);
 
@@ -458,7 +458,7 @@ int check_path(struct buf *bufp) {
 }
 
 
-void enlist(char *arg_list[], char *arg) {
+void enlist(char *arg_list[], const char *arg) {
     char **p;
 
     p = arg_list;
@@ -491,3 +491,24 @@ void dbprintf_arglist(char **list) {
 	dbprintf("list[%d]:%s\n", count++, p);
 
 }
+
+
+void logprint(const char *log_file, const char *s) {
+
+     FILE *fp;
+
+     if (DEBUG) {
+	 fputs(s, stderr);
+     } else {
+	 fp = fopen(log_file, "a");
+	 
+	 if (fp) {
+
+	     fputs(s, fp);
+	     fclose(fp);
+	 } 
+     }
+     
+	      
+}
+

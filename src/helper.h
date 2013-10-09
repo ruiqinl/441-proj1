@@ -17,7 +17,7 @@
 #define HEADER_LEN 1024
 #define ARG_MAX 1024
 
-extern const char CRLF[];
+extern const char CRLF[]; 
 extern const char CRLF2[];
 
 extern const char cont_type[];
@@ -189,8 +189,10 @@ void clear_buf_array(struct buf *buf_pts[], int maxfd);
 
 int check_path(struct buf *bufp);
 
-void enlist(char *arg_list[], char *arg);
+void enlist(char *arg_list[], const char *arg);
 char *delist(char *arg_list[]);
 void dbprintf_arglist(char **list);
+
+void logprint(const char *log_file, const char *s);
 
 #endif

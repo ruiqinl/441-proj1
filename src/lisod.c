@@ -65,19 +65,21 @@ int main(int argc, char* argv[])
     /* all networked programs must create a socket */
     if ((sock = socket(PF_INET, SOCK_STREAM, 0)) == -1)
     {
-        fprintf(stderr, "Failed creating socket.\n");
+	logprint(logfile, "Failed creating socket.\n");
+        //fprintf(stderr, "Failed creating socket.\n");
         return EXIT_FAILURE;
     }
 
     addr.sin_family = AF_INET;
     addr.sin_port = htons(ECHO_PORT);
-    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_addr.s_addr = INADDR_ANY; 
 
     /* servers bind sockets to ports---notify the OS they accept connections */
     if (bind(sock, (struct sockaddr *) &addr, sizeof(addr)))
     {
         close_socket(sock);
-        fprintf(stderr, "Failed binding socket.\n");
+	logprint(logfile, "Failed binding socket.\n");
+        //fprintf(stderr, "Failed binding socket.\n");
         return EXIT_FAILURE;
     } 
 
@@ -85,7 +87,8 @@ int main(int argc, char* argv[])
     if (listen(sock, 5))
     {
         close_socket(sock);
-        fprintf(stderr, "Error listening on socket.\n");
+	logprint(logfile, "Error listening on socket.\n");
+        //fprintf(stderr, "Error listening on socket.\n");
         return EXIT_FAILURE;
     }
 
@@ -96,7 +99,8 @@ int main(int argc, char* argv[])
 
     // we want to use TLSv1 only
     if ((ssl_context = SSL_CTX_new(TLSv1_server_method())) == NULL) {
-	fprintf(stderr, "Error creating SSL contex.\n");
+	logprint(logfile, "Error creating SSL contex.\n");
+	//fprintf(stderr, "Error creating SSL contex.\n");
 	return EXIT_FAILURE;
     }
 
@@ -105,7 +109,8 @@ int main(int argc, char* argv[])
     dbprintf("private key:%s\n", privatekey);
     if (SSL_CTX_use_PrivateKey_file(ssl_context, privatekey, SSL_FILETYPE_PEM) == 0) {
 	SSL_CTX_free(ssl_context);
-	fprintf(stderr, "Error associating private key.\n");
+	logprint(logfile, "Error associating private key.\n");
+	//fprintf(stderr, "Error associating private key.\n");
 	return EXIT_FAILURE;
     }
 
@@ -113,7 +118,8 @@ int main(int argc, char* argv[])
     //if (SSL_CTX_use_certificate_file(ssl_context, "../certs/ruiqinl.crt", SSL_FILETYPE_PEM) == 0) {
     if (SSL_CTX_use_certificate_file(ssl_context, cert, SSL_FILETYPE_PEM) == 0) {
 	SSL_CTX_free(ssl_context);
-	fprintf(stderr, "Error associating certificate.\n");
+	//fprintf(stderr, "Error associating certificate.\n");
+	logprint(logfile, "Error associating certificate.\n");
 	return EXIT_FAILURE;
     }
     
@@ -123,7 +129,8 @@ int main(int argc, char* argv[])
     if ((ssl_sock = socket(PF_INET, SOCK_STREAM, 0)) == -1)
     {
 	SSL_CTX_free(ssl_context);
-        fprintf(stderr, "Failed creating ssl socket.\n");
+        //fprintf(stderr, "Failed creating ssl socket.\n");
+	logprint(logfile, "Failed creating ssl socket.\n");
         return EXIT_FAILURE;
     }
 
@@ -136,7 +143,8 @@ int main(int argc, char* argv[])
     {
         close_socket(ssl_sock);
 	SSL_CTX_free(ssl_context);
-        fprintf(stderr, "Failed binding ssl_socket.\n");
+        //fprintf(stderr, "Failed binding ssl_socket.\n");
+	logprint(logfile, "Failed binding ssl_socket.\n");
         return EXIT_FAILURE;
     } 
 
@@ -145,7 +153,8 @@ int main(int argc, char* argv[])
     {
         close_socket(ssl_sock);
 	SSL_CTX_free(ssl_context);
-        fprintf(stderr, "Error listening on ssl_socket.\n");
+        logprint(logfile, "Error listening on ssl_socket.\n");
+        //fprintf(stderr, "Error listening on ssl_socket.\n");
         return EXIT_FAILURE;
     }
 
@@ -170,7 +179,8 @@ int main(int argc, char* argv[])
 	write_fds = master_write_fds;
 
 	if (select(maxfd+1, &read_fds, &write_fds, NULL, NULL) == -1) {
-	    perror("Error! select");
+	    //perror("Error! select");
+	    logprint(logfile, "Error! select");
 	    close_socket(sock);
 	    clear_buf_array(buf_pts, maxfd);
 	    return EXIT_FAILURE;
@@ -195,7 +205,8 @@ int main(int argc, char* argv[])
 		    }
 
 		    if (client_sock == -1) {
-			perror("Error! accept error! ignore it");
+			//perror("Error! accept error! ignore it");
+			logprint(logfile, "Error! accept error! ignore it");
 		    } else {
 
 			dbprintf("Server: received new connection from %s, ", inet_ntop(AF_INET, &(cli_addr.sin_addr), clientIP, INET6_ADDRSTRLEN)); 
@@ -245,7 +256,8 @@ int main(int argc, char* argv[])
 			dbprintf("Server: recv data from cgi pipe %d\n", i);
 			
 			if ((recv_ret = recv_from_cgi(i, pipe_buf_array[i])) == -1) {
-			    dbprintf("Error! Server, recv_from_cgi return -1\n");
+			    //dbprintf("Error! Server, recv_from_cgi return -1\n");
+			    logprint(logfile, "Error! Server, recv_from_cgi return -1\n");
 			    FD_CLR(i, &master_read_fds);
 			    // ??? clear up????
 			} else if (recv_ret == 0) {
@@ -302,7 +314,8 @@ int main(int argc, char* argv[])
 				    dbprintf_arglist(buf_pts[i]->http_req_p->cgi_env_list);
 
 				    if (run_cgi(buf_pts[i]) == -1 ) {
-					dbprintf("Error! Server, init_cgi/run_cgi\n");
+					//dbprintf("Error! Server, init_cgi/run_cgi\n");
+					logprint(logfile, "Error! Server, init_cgi/run_cgi\n");
 					cgi_FD_CLR(buf_pts[i], &master_read_fds, &master_write_fds);
 					clear_buf(buf_pts[i]);
 					close_socket(i);
@@ -334,6 +347,7 @@ int main(int argc, char* argv[])
 
 			    if (recv_ret == -1) {
 				perror("Error! Server, recv_request, clearup buf");
+				logprint(logfile, "Error! Server, recv_request, clearup buf");
 			    } else if ( recv_ret == 0) { 
 				dbprintf("Server: client_sock %d closed, clearup buf\n",i);
 			    }
